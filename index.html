@@ -1,0 +1,2186 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>運算的本質：自製二位元加法器 | WeClass X TSMC</title>
+<style>
+  :root {
+    --bg-main: #0f172a;
+    --bg-panel: #1e293b;
+    --bg-card: #334155;
+    --board-cream: #fdf8ec;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --accent: #f59e0b;
+    --accent-green: #10b981;
+    --accent-blue: #38bdf8;
+    --danger: #ef4444;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+
+  body {
+    font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* 頂部導覽列 */
+  header {
+    background: linear-gradient(90deg, #0f172a 0%, #1e293b 60%, #0f172a 100%);
+    border-bottom: 1px solid #334155;
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .brand-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .brand-badge {
+    background: linear-gradient(135deg, #ea580c 0%, #dc2626 100%);
+    color: #fff;
+    font-weight: 900;
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    letter-spacing: 0.6px;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(234, 88, 12, 0.4);
+  }
+
+  .brand-title h1 {
+    font-size: 18px;
+    font-weight: 800;
+    color: #f8fafc;
+    letter-spacing: 0.5px;
+  }
+
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+
+  select, button {
+    font-family: inherit;
+    font-size: 12.5px;
+    border-radius: 6px;
+    border: 1px solid #475569;
+    background: #1e293b;
+    color: #f8fafc;
+    padding: 6px 11px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  button:hover { background: #334155; border-color: #64748b; }
+  button:active { transform: translateY(1px); }
+
+  .mode-btn-group {
+    display: inline-flex;
+    background: #0f172a;
+    padding: 3px;
+    border-radius: 8px;
+    border: 1px solid #475569;
+    gap: 4px;
+  }
+
+  .mode-btn {
+    border: none;
+    background: transparent;
+    color: #94a3b8;
+    font-weight: 700;
+    padding: 5px 11px;
+    border-radius: 5px;
+  }
+  .mode-btn:hover { color: #fff; background: #1e293b; }
+  .mode-btn.active-guided {
+    background: #2563eb;
+    color: #fff;
+    box-shadow: 0 0 10px rgba(37, 99, 235, 0.4);
+  }
+  .mode-btn.active-free {
+    background: #7c3aed;
+    color: #fff;
+    box-shadow: 0 0 10px rgba(124, 58, 237, 0.4);
+  }
+
+  .btn-primary {
+    background: #d97706;
+    border-color: #f59e0b;
+    color: #fff;
+    font-weight: 700;
+  }
+  .btn-primary:hover { background: #b45309; }
+
+  .btn-success {
+    background: #059669;
+    border-color: #10b981;
+    color: #fff;
+    font-weight: 700;
+  }
+  .btn-success:hover { background: #047857; }
+
+  .btn-danger {
+    background: #7f1d1d;
+    border-color: #ef4444;
+    color: #fecaca;
+  }
+  .btn-danger:hover { background: #991b1b; }
+
+  /* 主工作區 */
+  .workspace {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* 左側畫布區 */
+  .canvas-container {
+    flex: 1;
+    position: relative;
+    background: #182234;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 8px;
+  }
+
+  #circuit-svg {
+    width: 100%;
+    height: 100%;
+    max-width: 1420px;
+    max-height: 940px;
+    background: var(--board-cream);
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    border: 3px solid #475569;
+  }
+
+  /* 浮動提示框 (固定於畫布右上角空白處) */
+  .canvas-hud {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    width: 235px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .hud-pill {
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(4px);
+    color: #f8fafc;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #475569;
+    font-size: 12.5px;
+    line-height: 1.5;
+    pointer-events: auto;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+  }
+
+  .hud-pill.free-mode-pill {
+    border-color: #a855f7;
+    background: rgba(30, 17, 54, 0.92);
+  }
+
+  .short-circuit-banner {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #dc2626;
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 900;
+    font-size: 14px;
+    border: 2px solid #fef08a;
+    box-shadow: 0 6px 20px rgba(220, 38, 38, 0.6);
+    display: none;
+    z-index: 20;
+  }
+  .short-circuit-banner.show { display: block; }
+
+  /* 右側教學與控制面板 */
+  .side-panel {
+    width: 400px;
+    background: var(--bg-panel);
+    border-left: 1px solid #334155;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 14px;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .panel-card {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 12px;
+  }
+
+  .step-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .step-badge {
+    background: #2563eb;
+    color: #fff;
+    font-weight: 800;
+    font-size: 12px;
+    padding: 3px 9px;
+    border-radius: 4px;
+  }
+  .step-badge.free-badge {
+    background: #7c3aed;
+  }
+
+  .step-counter {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .step-title {
+    font-size: 16px;
+    font-weight: 800;
+    color: #fbbf24;
+    margin-bottom: 8px;
+    line-height: 1.35;
+  }
+
+  .task-box {
+    background: #1e293b;
+    border-left: 4px solid #f59e0b;
+    padding: 10px;
+    border-radius: 0 8px 8px 0;
+    margin-bottom: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .task-endpoints {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    margin: 8px 0;
+    background: #0f172a;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid #334155;
+  }
+
+  .ep-chip {
+    padding: 4px 8px;
+    border-radius: 5px;
+    font-weight: 700;
+    font-size: 12.5px;
+    background: #334155;
+    color: #fff;
+    flex: 1;
+    text-align: center;
+  }
+
+  .ep-chip.selected {
+    outline: 2px solid #38bdf8;
+    background: #0369a1;
+  }
+
+  .method-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 4px;
+  }
+  .method-pin { background: #1e293b; color: #38bdf8; border: 1px solid #38bdf8; }
+  .method-twist { background: #450a0a; color: #fca5a5; border: 1px solid #ef4444; }
+  .method-strip { background: #422006; color: #fde047; border: 1px solid #eab308; }
+
+  .desc-text {
+    font-size: 13px;
+    color: #cbd5e1;
+    line-height: 1.55;
+  }
+
+  /* 檢查點臨時測試按鈕 */
+  .temp-test-box {
+    margin-top: 10px;
+    padding: 10px;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px dashed #10b981;
+    border-radius: 8px;
+    display: none;
+  }
+  .temp-test-box.active-box { display: block; }
+
+  .btn-temp-toggle {
+    width: 100%;
+    padding: 9px;
+    font-weight: 800;
+    font-size: 13px;
+    background: #065f46;
+    border: 2px solid #10b981;
+    color: #ecfdf5;
+    border-radius: 6px;
+  }
+  .btn-temp-toggle.engaged {
+    background: #dc2626;
+    border-color: #fca5a5;
+    color: #fff;
+  }
+
+  /* 導覽按鈕列 */
+  .nav-btn-row {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr 1fr;
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  /* 自由模式專屬工具面板 */
+  .free-tools-box {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .free-tools-box.active-free-tools { display: flex; }
+
+  .diag-result-box {
+    background: #1e293b;
+    border: 1px solid #475569;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 12px;
+    max-height: 130px;
+    overflow-y: auto;
+    line-height: 1.5;
+    display: none;
+  }
+
+  /* 開關組即時測試面板 */
+  .switch-console-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #94a3b8;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .switch-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .sw-btn {
+    padding: 10px 8px;
+    border-radius: 8px;
+    border: 2px solid #475569;
+    background: #1e293b;
+    color: #f8fafc;
+    font-weight: 800;
+    font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+  }
+  .sw-btn span.sub {
+    font-size: 11px;
+    font-weight: 500;
+    color: #94a3b8;
+  }
+  .sw-btn.pressed {
+    background: #1d4ed8;
+    border-color: #60a5fa;
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+  }
+  .sw-btn.pressed span.sub { color: #dbeafe; }
+
+  .math-readout {
+    background: #1e293b;
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid #334155;
+  }
+  .math-readout strong { color: #fbbf24; font-size: 15px; }
+
+  /* 真值表快速測試區 */
+  .truth-table-wrap {
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid #334155;
+    border-radius: 6px;
+  }
+
+  table.truth-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    text-align: center;
+  }
+  table.truth-table th {
+    background: #1e293b;
+    color: #cbd5e1;
+    padding: 5px 4px;
+    position: sticky;
+    top: 0;
+    border-bottom: 1px solid #475569;
+  }
+  table.truth-table td {
+    padding: 4px;
+    border-bottom: 1px solid #1e293b;
+    cursor: pointer;
+  }
+  table.truth-table tr:hover td { background: rgba(56, 189, 248, 0.15); }
+  table.truth-table tr.current-row td {
+    background: rgba(245, 158, 11, 0.25);
+    font-weight: 700;
+  }
+
+  /* SVG 內部互動樣式 */
+  .terminal-hit {
+    cursor: pointer;
+    transition: r 0.15s ease;
+  }
+  .terminal-hit:hover {
+    stroke: #0284c7;
+    stroke-width: 3px;
+    r: 8px;
+  }
+
+  .wire-deletable {
+    cursor: pointer;
+  }
+  .wire-deletable:hover path {
+    filter: drop-shadow(0 0 6px #ef4444);
+  }
+
+  @keyframes pulseRing {
+    0% { r: 9px; opacity: 1; stroke-width: 3px; }
+    70% { r: 18px; opacity: 0.2; stroke-width: 5px; }
+    100% { r: 9px; opacity: 1; stroke-width: 3px; }
+  }
+  .target-ring {
+    fill: rgba(245, 158, 11, 0.25);
+    stroke: #d97706;
+    animation: pulseRing 1.3s infinite;
+    pointer-events: none;
+  }
+  .selected-ring {
+    fill: rgba(56, 189, 248, 0.35);
+    stroke: #0284c7;
+    stroke-width: 3.5px;
+    pointer-events: none;
+  }
+
+  @keyframes currentFlow {
+    to { stroke-dashoffset: -24; }
+  }
+  .wire-live-flow {
+    stroke-dasharray: 6 6;
+    animation: currentFlow 0.6s linear infinite;
+    pointer-events: none;
+  }
+
+  .switch-cluster-btn {
+    cursor: pointer;
+  }
+  .switch-cluster-btn:hover .cluster-bg {
+    stroke: #2563eb;
+    stroke-width: 3px;
+  }
+
+  .toast-msg {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.95);
+    color: #fff;
+    padding: 9px 18px;
+    border-radius: 8px;
+    border: 1px solid #f59e0b;
+    font-size: 13.5px;
+    font-weight: 700;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+    z-index: 30;
+  }
+  .toast-msg.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand-title">
+    <span class="brand-badge">WeClass X TSMC</span>
+    <h1>運算的本質：自製二位元加法器</h1>
+  </div>
+  <div class="header-controls">
+    <div class="mode-btn-group">
+      <button class="mode-btn active-guided" id="btn-mode-guided" onclick="setSimulatorMode('guided')">🧭 引導模式</button>
+      <button class="mode-btn" id="btn-mode-free" onclick="setSimulatorMode('free')">🛠️ 自由模式</button>
+    </div>
+
+    <select id="stage-select" onchange="jumpToStep(parseInt(this.value))" title="選擇教學步驟"></select>
+    <button onclick="toggleCurrentFlowVis()" id="btn-flow-vis">⚡ 電流高亮：開啟</button>
+    <button class="btn-success" onclick="completeAllWires()">🔌 一鍵接完</button>
+    <button class="btn-danger" onclick="resetAllWires()">🔄 重置回步驟 1</button>
+  </div>
+</header>
+
+<div class="workspace">
+  <!-- 左側主電路畫布 -->
+  <div class="canvas-container">
+    <div class="short-circuit-banner" id="short-circuit-banner">
+      ⚠️ 警告：發生電源正負極短路！紅軌 (+) 與黑軌 (-) 直接導通，請檢查接線！
+    </div>
+
+    <!-- 右上角多行提示框 -->
+    <div class="canvas-hud">
+      <div class="hud-pill" id="hud-mode-hint">
+        💡 <b>引導接線模式</b><br>
+        1. 依序點擊畫布上閃爍的兩個端點完成拉線，或按右側「⚡ 自動接上此線」。<br>
+        2. 隨時可點擊 <b>A0、B0、A1、B1</b> 測試燈號！
+      </div>
+    </div>
+
+    <svg id="circuit-svg" viewBox="0 0 1380 940" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="toast-msg" id="toast-msg">提示訊息</div>
+  </div>
+
+  <!-- 右側教學引導與控制區 -->
+  <div class="side-panel">
+    <!-- 步驟教學卡片 / 自由模式卡片 -->
+    <div class="panel-card">
+      <div class="step-header">
+        <span class="step-badge" id="step-mode-badge">步驟 1</span>
+        <span class="step-counter" id="step-counter-text">進度 1 / 35</span>
+      </div>
+      <div class="step-title" id="step-title-text">開關組固定與初始佈局</div>
+
+      <div class="task-box" id="task-box-container">
+        <div id="task-instruction-text">請確認四組微動開關、中央壓接端子與上方甲乙丙三顆 LED 燈的位置。</div>
+        <div class="task-endpoints" id="task-endpoints-ui" style="display:none;">
+          <div class="ep-chip" id="ep-from-chip">起點</div>
+          <span style="color:#f59e0b;font-weight:900;">➔</span>
+          <div class="ep-chip" id="ep-to-chip">終點</div>
+        </div>
+        <div id="task-method-badge"></div>
+      </div>
+
+      <div class="desc-text" id="step-desc-text"></div>
+
+      <!-- 檢查點臨時測試按鈕 -->
+      <div class="temp-test-box" id="temp-test-box">
+        <div style="font-size:12px;color:#a7f3d0;margin-bottom:6px;font-weight:700;" id="temp-test-label">
+          🔬 階段檢查點臨時測試功能：
+        </div>
+        <button class="btn-temp-toggle" id="btn-temp-test" onclick="toggleTempTestWire()">
+          🔌 點擊臨時接觸 LED 長腳進行測試
+        </button>
+      </div>
+
+      <!-- 引導模式導覽列 -->
+      <div class="nav-btn-row" id="guided-nav-row">
+        <button onclick="prevStep()" id="btn-prev">⬅ 上一步</button>
+        <button class="btn-primary" onclick="autoWireCurrentOrNext()" id="btn-action-next">開始接線 ➔</button>
+        <button onclick="nextStep()" id="btn-skip">下一步 ➡</button>
+      </div>
+
+      <!-- 自由模式專屬工具列 -->
+      <div class="free-tools-box" id="free-tools-box">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+          <button onclick="undoLastFreeWire()">↩️ 撤銷最後一條線</button>
+          <button class="btn-danger" onclick="clearAllFreeWires()">🧹 清空畫布所有線</button>
+        </div>
+        <button class="btn-primary" onclick="runFullDiagnostic()" style="width:100%;padding:8px;">
+          🔍 自動診斷目前電路（比對 16 種加法組合）
+        </button>
+        <div class="diag-result-box" id="diag-result-box"></div>
+      </div>
+    </div>
+
+    <!-- 隨時按壓開關組測試區 -->
+    <div class="panel-card">
+      <div class="switch-console-title">
+        <span>🎛️ 隨時模擬按下開關組（整組連動）</span>
+        <button onclick="releaseAllSwitches()" style="padding:2px 8px;font-size:11.5px;">全部放開</button>
+      </div>
+      <div class="switch-grid">
+        <button class="sw-btn" id="sw-btn-B1" onclick="toggleSwitchGroup('B1')">
+          <span>B1 開關組 (2¹ = 2)</span>
+          <span class="sub">d1, d2, e2, f2 | 狀態: 0</span>
+        </button>
+        <button class="sw-btn" id="sw-btn-B0" onclick="toggleSwitchGroup('B0')">
+          <span>B0 開關組 (2⁰ = 1)</span>
+          <span class="sub">b1, b2, b3 | 狀態: 0</span>
+        </button>
+        <button class="sw-btn" id="sw-btn-A1" onclick="toggleSwitchGroup('A1')">
+          <span>A1 開關組 (2¹ = 2)</span>
+          <span class="sub">c1, c2, e1, f1 | 狀態: 0</span>
+        </button>
+        <button class="sw-btn" id="sw-btn-A0" onclick="toggleSwitchGroup('A0')">
+          <span>A0 開關組 (2⁰ = 1)</span>
+          <span class="sub">a1, a2, a3 | 狀態: 0</span>
+        </button>
+      </div>
+      <div class="math-readout">
+        <span id="math-input-str">輸入：A (00₂ = 0) + B (00₂ = 0)</span>
+        <strong id="math-output-str">亮燈：000₂ (0)</strong>
+      </div>
+    </div>
+
+    <!-- 測試真值表 -->
+    <div class="panel-card" style="flex:1;display:flex;flex-direction:column;min-height:175px;">
+      <div class="switch-console-title">
+        <span>📋 全組合測試真值表（點擊任一列自動按開關）</span>
+      </div>
+      <div class="truth-table-wrap">
+        <table class="truth-table">
+          <thead>
+            <tr>
+              <th>A0</th><th>A1</th><th>B0</th><th>B1</th>
+              <th>十進位運算</th>
+              <th>甲(2²)</th><th>乙(2¹)</th><th>丙(2⁰)</th>
+            </tr>
+          </thead>
+          <tbody id="truth-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// 1. 顏色定義與硬體常數
+// ============================================================================
+const WIRE_COLORS = {
+  red:    { hex: '#ef4444', name: '紅' },
+  orange: { hex: '#f97316', name: '橙' },
+  yellow: { hex: '#facc15', name: '黃' },
+  green:  { hex: '#16a34a', name: '綠' },
+  blue:   { hex: '#2563eb', name: '藍' },
+  purple: { hex: '#9333ea', name: '紫' },
+  black:  { hex: '#1e293b', name: '黑' },
+  white:  { hex: '#f8fafc', name: '白' },
+  grey:   { hex: '#94a3b8', name: '灰' },
+  brown:  { hex: '#92400e', name: '咖啡' }
+};
+
+// 開關組按壓狀態 (true = 按下導通 NO, false = 放開導通 NC)
+const switchGroups = {
+  A0: false, // a1, a2, a3
+  B0: false, // b1, b2, b3
+  A1: false, // c1, c2, e1, f1
+  B1: false  // d1, d2, e2, f2
+};
+
+// 14 顆微動開關幾何定義
+const CLUSTERS = {
+  B1: { id: 'B1', label: 'B1', bitLabel: '2¹ (數值 2)', cx: 330, cy: 300, hasF: true,
+        sw: { up: 'd1', down: 'd2', left: 'e2', right: 'f2' } },
+  B0: { id: 'B0', label: 'B0', bitLabel: '2⁰ (數值 1)', cx: 980, cy: 300, hasF: false,
+        sw: { up: 'b1', down: 'b2', left: 'b3', right: null } },
+  A1: { id: 'A1', label: 'A1', bitLabel: '2¹ (數值 2)', cx: 330, cy: 700, hasF: true,
+        sw: { up: 'c1', down: 'c2', left: 'e1', right: 'f1' } },
+  A0: { id: 'A0', label: 'A0', bitLabel: '2⁰ (數值 1)', cx: 980, cy: 700, hasF: false,
+        sw: { up: 'a1', down: 'a2', left: 'a3', right: null } }
+};
+
+const TERMINALS = {};
+
+function initTerminals() {
+  Object.values(CLUSTERS).forEach(cl => {
+    const { cx, cy, sw, id } = cl;
+    // 上方直立開關 (a1, b1, c1, d1) - 腳位朝左：COM(紅), NO(橙), NC(黃)
+    TERMINALS[`${sw.up}.COM`] = { id: `${sw.up}.COM`, label: `${sw.up} 的 COM (紅)`, x: cx - 105, y: cy - 105, pinX: cx - 22, pinY: cy - 105, color: 'red', group: id, swName: sw.up, role: 'COM' };
+    TERMINALS[`${sw.up}.NO`]  = { id: `${sw.up}.NO`,  label: `${sw.up} 的 NO (橙)`,  x: cx - 105, y: cy - 72,  pinX: cx - 22, pinY: cy - 72,  color: 'orange', group: id, swName: sw.up, role: 'NO' };
+    TERMINALS[`${sw.up}.NC`]  = { id: `${sw.up}.NC`,  label: `${sw.up} 的 NC (黃)`,  x: cx - 105, y: cy - 39,  pinX: cx - 22, pinY: cy - 39,  color: 'yellow', group: id, swName: sw.up, role: 'NC' };
+
+    // 下方直立開關 (a2, b2, c2, d2) - 腳位朝右：NC(紫), NO(藍), COM(綠)
+    TERMINALS[`${sw.down}.NC`]  = { id: `${sw.down}.NC`,  label: `${sw.down} 的 NC (紫)`,  x: cx + 105, y: cy + 32,  pinX: cx + 22, pinY: cy + 32,  color: 'purple', group: id, swName: sw.down, role: 'NC' };
+    TERMINALS[`${sw.down}.NO`]  = { id: `${sw.down}.NO`,  label: `${sw.down} 的 NO (藍)`,  x: cx + 105, y: cy + 65,  pinX: cx + 22, pinY: cy + 65,  color: 'blue', group: id, swName: sw.down, role: 'NO' };
+    TERMINALS[`${sw.down}.COM`] = { id: `${sw.down}.COM`, label: `${sw.down} 的 COM (綠)`, x: cx + 105, y: cy + 98,  pinX: cx + 22, pinY: cy + 98,  color: 'green', group: id, swName: sw.down, role: 'COM' };
+
+    // 左側橫置開關 (a3, b3, e1, e2) - 腳位朝下：COM(黑), NO(白), NC(不接)
+    TERMINALS[`${sw.left}.COM`] = { id: `${sw.left}.COM`, label: `${sw.left} 的 COM (黑)`, x: cx - 118, y: cy + 110, pinX: cx - 118, pinY: cy + 26, color: 'black', group: id, swName: sw.left, role: 'COM' };
+    TERMINALS[`${sw.left}.NO`]  = { id: `${sw.left}.NO`,  label: `${sw.left} 的 NO (白)`,  x: cx - 82,  y: cy + 110, pinX: cx - 82,  pinY: cy + 26, color: 'white', group: id, swName: sw.left, role: 'NO' };
+
+    // 右側橫置開關 (f1, f2) - 腳位朝上：NC(不接), NO(咖啡), COM(灰)
+    if (sw.right) {
+      TERMINALS[`${sw.right}.NO`]  = { id: `${sw.right}.NO`,  label: `${sw.right} 的 NO (咖啡)`, x: cx + 72,  y: cy - 115, pinX: cx + 72,  pinY: cy - 26, color: 'brown', group: id, swName: sw.right, role: 'NO' };
+      TERMINALS[`${sw.right}.COM`] = { id: `${sw.right}.COM`, label: `${sw.right} 的 COM (灰)`,  x: cx + 108, y: cy - 115, pinX: cx + 108, pinY: cy - 26, color: 'grey', group: id, swName: sw.right, role: 'COM' };
+    }
+  });
+
+  // 中央壓接端子 (黑軌 - / 紅軌 +)
+  TERMINALS['PWR_NEG'] = { id: 'PWR_NEG', label: '電源黑軌 (-)', x: 635, y: 472, color: 'black', isHub: true };
+  TERMINALS['PWR_POS'] = { id: 'PWR_POS', label: '電源紅軌 (+)', x: 635, y: 508, color: 'red', isHub: true };
+
+  // 最上方三顆 LED (左：甲 2²、中：乙 2¹、右：丙 2⁰)
+  TERMINALS['LED_JIA_POS']  = { id: 'LED_JIA_POS',  label: '甲燈長腳 (+)', x: 315, y: 112, color: 'red', isLed: true };
+  TERMINALS['LED_JIA_NEG']  = { id: 'LED_JIA_NEG',  label: '甲燈短腳 (-)', x: 345, y: 112, color: 'brown', isLed: true };
+  TERMINALS['LED_YI_POS']   = { id: 'LED_YI_POS',   label: '乙燈長腳 (+)', x: 675, y: 112, color: 'red', isLed: true };
+  TERMINALS['LED_YI_NEG']   = { id: 'LED_YI_NEG',   label: '乙燈短腳 (-)', x: 705, y: 112, color: 'brown', isLed: true };
+  TERMINALS['LED_BING_POS'] = { id: 'LED_BING_POS', label: '丙燈長腳 (+)', x: 1035, y: 112, color: 'red', isLed: true };
+  TERMINALS['LED_BING_NEG'] = { id: 'LED_BING_NEG', label: '丙燈短腳 (-)', x: 1065, y: 112, color: 'brown', isLed: true };
+
+  // 關鍵中繼扭線與標註節點
+  TERMINALS['NODE_NO_CARRY'] = { id: 'NODE_NO_CARRY', label: '未進位線 (a2/b2的NC扭線)', x: 1245, y: 515, color: 'purple', isTag: true, tagText: '未進位線' };
+  TERMINALS['NODE_CARRY']    = { id: 'NODE_CARRY',    label: '進位線 (來自b2的NO)',      x: 1155, y: 365, color: 'blue',   isTag: true, tagText: '進位線' };
+  TERMINALS['NODE_YI1']      = { id: 'NODE_YI1',      label: '標註「乙1」(來自d1的COM)', x: 115,  y: 195, color: 'red',    isTag: true, tagText: '乙1' };
+  TERMINALS['NODE_YI2']      = { id: 'NODE_YI2',      label: '標註「乙2」與乙1扭線處',   x: 115,  y: 265, color: 'green',  isTag: true, tagText: '乙1+乙2扭線' };
+  TERMINALS['NODE_JIA1']     = { id: 'NODE_JIA1',     label: '標註「甲1」(來自b3的NO)',  x: 590,  y: 410, color: 'white',  isTag: true, tagText: '甲1' };
+  TERMINALS['NODE_JIA2']     = { id: 'NODE_JIA2',     label: '標註「甲2」扭線匯流處',     x: 540,  y: 485, color: 'white',  isTag: true, tagText: '甲2' };
+}
+
+initTerminals();
+
+// ============================================================================
+// 2. 完整接線定義與直角路徑座標
+//    - flowReverse: true 代表電流實際方向為由 to 端流向 from 端
+//    - 上方 LED 走線已全面改由下方通道 (y=124..172) 垂直向上接入長腳 (y=112)，完全不遮擋燈泡
+// ============================================================================
+const WIRES = [
+  // --- 階段 1: 從 A0 開始 (個位數 XOR，控制丙燈) ---
+  {
+    id: 'W1', title: '從 A0 開始 (XOR)：接通 a1 電源',
+    from: 'a1.COM', to: 'PWR_POS', color: 'red', flowReverse: true,
+    method: 'strip', methodLabel: '✂️ 剝線接入壓接端子紅軌 (+)',
+    path: [[875,595], [795,595], [795,508], [635,508]],
+    desc: '將 a1 的 COM (紅線) 剝線後接入中央壓接端子的電源紅軌 (+)，提供個位數互斥或閘 (XOR) 的總電源。'
+  },
+  {
+    id: 'W2', title: '從 A0 開始 (XOR)：a1.NO 接 b1.NC',
+    from: 'a1.NO', to: 'b1.NC', color: 'orange', color2: 'yellow',
+    method: 'pin', methodLabel: '⬛ 使用排針連接 (a1橙 ↔ b1黃)',
+    pinPos: [835, 440],
+    path: [[875,628], [835,628], [835,261], [875,261]],
+    desc: '拿出 1 顆雙頭排針，將 a1 的 NO (橙線) 與 b1 的 NC (黃線) 對插連接。'
+  },
+  {
+    id: 'W3', title: '從 A0 開始 (XOR)：a1.NC 接 b1.NO',
+    from: 'a1.NC', to: 'b1.NO', color: 'yellow', color2: 'orange',
+    method: 'pin', methodLabel: '⬛ 使用排針連接 (a1黃 ↔ b1橙)',
+    pinPos: [812, 440],
+    path: [[875,661], [812,661], [812,228], [875,228]],
+    desc: '再用 1 顆排針，將 a1 的 NC (黃線) 與 b1 的 NO (橙線) 對插，完成 a1 與 b1 的雙路交叉。'
+  },
+  {
+    id: 'W4', title: '從 A0 開始 (XOR)：b1.COM 接丙燈長腳',
+    from: 'b1.COM', to: 'LED_BING_POS', color: 'red',
+    method: 'direct', methodLabel: '🔌 杜邦母頭直接插上丙燈長腳 (+)',
+    path: [[875,195], [875,136], [1035,136], [1035,112]],
+    desc: '將 b1 的 COM (紅線) 接到最上方右側的「丙燈長腳 (2⁰)」。丙燈短腳已預先以咖啡色線接回電源黑軌 (-)。'
+  },
+
+  // --- 階段 2: A0 進位乙燈的與閘 (訊號傳遞線) ---
+  {
+    id: 'W5', title: 'A0 進位與閘：a2.COM 接電源紅軌',
+    from: 'a2.COM', to: 'PWR_POS', color: 'green', flowReverse: true,
+    method: 'strip', methodLabel: '✂️ 剝線接入壓接端子紅軌 (+)',
+    path: [[1085,798], [1135,798], [1135,882], [775,882], [775,508], [635,508]],
+    desc: '將 a2 的 COM (綠線) 接往電源紅軌 (+)。這邊是把個位數「是否進位」訊號往下傳遞的源頭！'
+  },
+  {
+    id: 'W6', title: 'A0 進位與閘：a2.NO 接 b2.COM',
+    from: 'a2.NO', to: 'b2.COM', color: 'blue', color2: 'green',
+    method: 'pin', methodLabel: '⬛ 使用排針連接 (a2藍 ↔ b2綠)',
+    pinPos: [1195, 580],
+    path: [[1085,765], [1195,765], [1195,398], [1085,398]],
+    desc: '使用排針將 a2 的 NO (藍線) 接往 b2 的 COM (綠線)，構成判斷 A0、B0 是否同時按下的與閘 (AND)。'
+  },
+  {
+    id: 'W7', title: '訊號傳遞線：a2.NC 與 b2.NC 扭線標註「未進位線」',
+    from: 'a2.NC', to: 'b2.NC', viaNode: 'NODE_NO_CARRY', color: 'purple',
+    method: 'twist', methodLabel: '🔺 剝線扭線，標註為「未進位線」',
+    twistPos: [1245, 515],
+    path: [[1085,732], [1245,732], [1245,332], [1085,332]],
+    desc: '將 a2 的 NC (紫線) 與 b2 的 NC (紫線) 剝線後扭在一起，並標註為「未進位線」。只要 A0、B0 沒有同時被按下，這條未進位線就一定有電！'
+  },
+  {
+    id: 'W8', title: '訊號傳遞線：將 b2.NO 標註為「進位線」',
+    from: 'b2.NO', to: 'NODE_CARRY', color: 'blue',
+    method: 'strip', methodLabel: '🏷️ 貼上標籤標註為「進位線」',
+    path: [[1085,365], [1155,365]],
+    desc: '將 b2 的 NO (藍線) 標註為「進位線」。只有當 A0 與 B0 同時按下時，電才會從 a2.NO 流經 b2.COM 到達這條進位線！'
+  },
+
+  // --- 階段 3: 乙燈的 XOR (處理 2⁰ 沒進位) ---
+  {
+    id: 'W9', title: '乙燈的 XOR (處理 2⁰ 沒進位)：c1.COM 接未進位線',
+    from: 'c1.COM', to: 'NODE_NO_CARRY', color: 'red', flowReverse: true,
+    method: 'twist', methodLabel: '🔺 c1的COM剝線，與「未進位線(紫)」扭線',
+    twistPos: [1245, 515],
+    path: [[225,595], [190,595], [190,555], [1245,555], [1245,515]],
+    desc: '將 c1 的 COM (紅線) 剝線後，與剛剛來自 a2、b2 NC 的「未進位線 (紫)」扭線接在一起。當個位數沒進位時，由這條線供電給乙燈的 XOR。'
+  },
+  {
+    id: 'W10', title: '乙燈的 XOR：c1.NO 接 d1.NC',
+    from: 'c1.NO', to: 'd1.NC', color: 'orange', color2: 'yellow',
+    method: 'pin', methodLabel: '⬛ 使用排針連接 (c1橙 ↔ d1黃)',
+    pinPos: [168, 440],
+    path: [[225,628], [168,628], [168,261], [225,261]],
+    desc: '使用排針將 c1 的 NO (橙線) 與 d1 的 NC (黃線) 對插連接。'
+  },
+  {
+    id: 'W11', title: '乙燈的 XOR：c1.NC 接 d1.NO',
+    from: 'c1.NC', to: 'd1.NO', color: 'yellow', color2: 'orange',
+    method: 'pin', methodLabel: '⬛ 使用排針連接 (c1黃 ↔ d1橙)',
+    pinPos: [144, 440],
+    path: [[225,661], [144,661], [144,228], [225,228]],
+    desc: '使用排針將 c1 的 NC (黃線) 與 d1 的 NO (橙線) 對插連接。'
+  },
+  {
+    id: 'W12', title: '乙燈的 XOR：將 d1.COM 標註為「乙1」',
+    from: 'd1.COM', to: 'NODE_YI1', color: 'red',
+    method: 'strip', methodLabel: '🏷️ 標註為「乙1」(後續要剝線)',
+    path: [[225,195], [115,195]],
+    desc: '將 d1 的 COM (紅線) 標註為「乙1」。這是當個位數沒有進位時，負責控制乙燈亮滅的第一路訊號。'
+  },
+
+  // --- 階段 4: 乙燈的 XNOR (處理 2⁰ 有進位) ---
+  {
+    id: 'W13', title: '乙燈的 XNOR (處理 2⁰ 有進位)：c2.COM 接 b2.NO 進位線',
+    from: 'c2.COM', to: 'NODE_CARRY', color: 'green', color2: 'blue', flowReverse: true,
+    method: 'pin', methodLabel: '⬛ 使用排針將 c2.COM(綠) 接上「進位線(b2藍)」',
+    pinPos: [740, 580],
+    path: [[435,798], [740,798], [740,365], [1155,365]],
+    desc: '將 c2 的 COM (綠線) 用排針接上「進位線 (b2 的 NO 藍線)」。當 A0+B0 同時按下產生進位時，電力會改走這條路線進入 XNOR 閘！'
+  },
+  {
+    id: 'W14', title: '乙燈的 XNOR：c2.NO 接 d2.NO',
+    from: 'c2.NO', to: 'd2.NO', color: 'blue',
+    method: 'pin', methodLabel: '⬛ 使用排針連接 (c2藍 ↔ d2藍，NO對NO)',
+    pinPos: [478, 565],
+    path: [[435,765], [478,765], [478,365], [435,365]],
+    desc: '注意！XNOR 的接法是「同腳位對接」：使用排針將 c2 的 NO (藍線) 與 d2 的 NO (藍線) 接在一起（A1、B1 都按時導通）。'
+  },
+  {
+    id: 'W15', title: '乙燈的 XNOR：c2.NC 接 d2.NC',
+    from: 'c2.NC', to: 'd2.NC', color: 'purple',
+    method: 'pin', methodLabel: '⬛ 使用排針連接 (c2紫 ↔ d2紫，NC對NC)',
+    pinPos: [504, 535],
+    path: [[435,732], [504,732], [504,332], [435,332]],
+    desc: '使用排針將 c2 的 NC (紫線) 與 d2 的 NC (紫線) 接在一起（A1、B1 都不按時導通）。如此一來，只要 A1、B1 狀態相同就會通電！'
+  },
+  {
+    id: 'W16', title: '乙燈的 XNOR：d2.COM 剝線標註「乙2」並與乙1扭線',
+    from: 'd2.COM', to: 'NODE_YI2', viaNode: 'NODE_YI1', color: 'green',
+    method: 'twist', methodLabel: '🔺 d2.COM(綠)剝線標註「乙2」，與「乙1(紅)」扭線',
+    twistPos: [115, 265],
+    path: [[435,398], [458,398], [458,478], [115,478], [115,265]],
+    yi1BranchPath: [[115,195], [115,265]],
+    desc: '將 d2 的 COM (綠線) 剝線標註為「乙2」，拉到左側與「乙1 (紅線)」扭線接在一起。'
+  },
+  {
+    id: 'W17', title: '乙燈兩路匯流：將「乙1 + 乙2 扭線處」接上乙燈長腳',
+    from: 'NODE_YI2', to: 'LED_YI_POS', color: 'red',
+    method: 'twist', methodLabel: '🔺 將「乙1 + 乙2」扭線接上乙燈長腳 (+)',
+    twistPos: [115, 265],
+    path: [[115,265], [82,265], [82,148], [675,148], [675,112]],
+    desc: '將扭在一起的「乙1 + 乙2」接上最上方中間的「乙燈長腳 (2¹)」，完成乙燈的無進位 (XOR) 與有進位 (XNOR) 兩路自動切換控制！'
+  },
+
+  // --- 階段 5: 甲燈專屬進位與閘 (AND) ---
+  {
+    id: 'W18', title: '甲燈專屬進位與閘 (AND)：a3.COM 接電源紅軌',
+    from: 'a3.COM', to: 'PWR_POS', color: 'black', flowReverse: true,
+    method: 'strip', methodLabel: '✂️ 剝線接入壓接端子紅軌 (+)',
+    path: [[862,810], [862,902], [635,902], [635,508]],
+    desc: '現在處理最高位甲燈 (2²=4)。將 a3 的 COM (黑線) 剝線接到電源紅軌 (+)，專門用來處理 3+1 (11₂+01₂) 等跨位進位。'
+  },
+  {
+    id: 'W19', title: '甲燈專屬進位與閘：a3.NO 接 b3.COM',
+    from: 'a3.NO', to: 'b3.COM', color: 'white', color2: 'black',
+    method: 'pin', methodLabel: '⬛ 使用排針連接 (a3白 ↔ b3黑)',
+    pinPos: [1290, 620],
+    path: [[898,810], [898,876], [1290,876], [1290,478], [862,478], [862,410]],
+    desc: '使用排針將 a3 的 NO (白線) 與 b3 的 COM (黑線) 對插。當 A0 與 B0 同時被按下時，a3 與 b3 同時導通，送出潛在進位訊號！'
+  },
+  {
+    id: 'W20', title: '甲燈專屬進位與閘：b3.NO 剝線標註「甲1」',
+    from: 'b3.NO', to: 'NODE_JIA1', color: 'white',
+    method: 'strip', methodLabel: '✂️ 剝線，標註為「甲1」',
+    path: [[898,410], [590,410]],
+    desc: '將 b3 的 NO (白線) 剝線，並標註為「甲1」。為什麼不直接借用 b2 的進位線？因為若直接相連會造成電流逆流回乙燈！這就是獨立設置 a3、b3 的精妙之處。'
+  },
+
+  // --- 階段 6: 甲燈的進位路徑 1：處理 2+2 (與閘 AND) ---
+  {
+    id: 'W21', title: '甲燈進位路徑 1 (處理 2+2)：e1.COM 接電源紅軌',
+    from: 'e1.COM', to: 'PWR_POS', color: 'black', flowReverse: true,
+    method: 'strip', methodLabel: '✂️ 剝線接入壓接端子紅軌 (+)',
+    path: [[212,810], [212,916], [612,916], [612,508], [635,508]],
+    desc: '將 e1 的 COM (黑線) 剝線接入電源紅軌 (+)。這條路徑專門負責 A1 與 B1 同時按下 (2+2=4) 的直接進位。'
+  },
+  {
+    id: 'W22', title: '甲燈進位路徑 1：e1.NO 接 e2.COM',
+    from: 'e1.NO', to: 'e2.COM', color: 'white', color2: 'black',
+    method: 'pin', methodLabel: '⬛ 使用排針連接 (e1白 ↔ e2黑)',
+    pinPos: [55, 620],
+    path: [[248,810], [248,876], [55,876], [55,478], [212,478], [212,410]],
+    desc: '使用排針將 e1 的 NO (白線) 與 e2 的 COM (黑線) 對插連接。'
+  },
+  {
+    id: 'W23', title: '甲燈進位路徑 1：e2.NO 剝線標註「甲2」',
+    from: 'e2.NO', to: 'NODE_JIA2', color: 'white',
+    method: 'strip', methodLabel: '✂️ 剝線，標註為「甲2」',
+    path: [[248,410], [248,485], [540,485]],
+    desc: '將 e2 的 NO (白線) 剝線並標註為「甲2」。當 A1 與 B1 同時按下時，電流會經由 e1.NO → e2.COM → e2.NO 到達「甲2」！'
+  },
+
+  // --- 階段 7: 甲燈的進位路徑 2：處理 3+1、3+2 (OR) ---
+  {
+    id: 'W24', title: '甲燈進位路徑 2 (處理 3+1、3+2 的 OR)：f1.COM 接「甲1」',
+    from: 'f1.COM', to: 'NODE_JIA1', color: 'grey', flowReverse: true,
+    method: 'twist', methodLabel: '🔺 f1.COM(灰)剝線，與「甲1(白)」扭線',
+    twistPos: [590, 410],
+    path: [[438,585], [438,545], [590,545], [590,410]],
+    desc: '將 f1 的 COM (灰線) 剝線，接到來自 b3.NO 的「甲1 (白線)」。'
+  },
+  {
+    id: 'W25', title: '甲燈進位路徑 2 (OR 並聯)：f2.COM 接「甲1」',
+    from: 'f2.COM', to: 'NODE_JIA1', color: 'grey', flowReverse: true,
+    method: 'twist', methodLabel: '🔺 f2.COM(灰)剝線，與 f1.COM 及「甲1」扭在一起',
+    twistPos: [590, 410],
+    path: [[438,185], [438,172], [590,172], [590,410]],
+    desc: '將 f2 的 COM (灰線) 也剝線與「甲1 (白線)」扭在一起，讓 f1 與 f2 形成並聯的或閘 (OR Gate) 輸入端！'
+  },
+  {
+    id: 'W26', title: '甲燈進位路徑 2 (OR 輸出)：f1.NO 接「甲2」',
+    from: 'f1.NO', to: 'NODE_JIA2', color: 'brown',
+    method: 'twist', methodLabel: '🔺 f1.NO(咖啡)剝線，與「甲2(白)」扭線',
+    twistPos: [540, 485],
+    path: [[402,585], [402,520], [540,520], [540,485]],
+    desc: '將 f1 的 NO (咖啡色線) 剝線，與「甲2 (白線)」扭線接在一起。'
+  },
+  {
+    id: 'W27', title: '甲燈進位路徑 2 (OR 輸出)：f2.NO 接「甲2」',
+    from: 'f2.NO', to: 'NODE_JIA2', color: 'brown',
+    method: 'twist', methodLabel: '🔺 f2.NO(咖啡)剝線，與 f1.NO 及「甲2」扭在一起',
+    twistPos: [540, 485],
+    path: [[402,185], [402,160], [522,160], [522,485], [540,485]],
+    desc: '將 f2 的 NO (咖啡色線) 剝線，同樣與「甲2 (白線)」扭在一起。只要 A0+B0 按下使甲1有電，A1 或 B1 任一被按下就會導通 f1 或 f2！'
+  },
+  {
+    id: 'W28', title: '最終總成：將「甲2 + f1/f2 的 NO 扭線處」接上甲燈長腳',
+    from: 'NODE_JIA2', to: 'LED_JIA_POS', color: 'brown',
+    method: 'twist', methodLabel: '🔺 扭線總成接上甲燈長腳 (+)',
+    twistPos: [540, 485],
+    path: [[540,485], [540,136], [315,136], [315,112]],
+    desc: '最後一步！將匯流後的「甲2 + f1.NO + f2.NO」接上最上方左側的「甲燈長腳 (2²)」。恭喜完成純機械二位元全加器！'
+  }
+];
+
+// ============================================================================
+// 3. 教學步驟序列 (步驟 1 ~ 35)
+// ============================================================================
+const STEPS = [
+  {
+    type: 'info', title: '開關組固定與初始佈局確認',
+    wireIndex: -1,
+    instruction: '歡迎來到「自製二位元加法器」互動模擬器！畫布已擺放好 B1、B0、A1、A0 四組微動開關與固定色杜邦線，且上方甲(2²)、乙(2¹)、丙(2⁰)三顆燈的短腳皆已用咖啡色線接回電源黑軌 (-)。',
+    desc: '請點擊下方「開始接線 ➔」進入下一步。在任何時候，您都可以直接用滑鼠點擊畫布上的 A0、B0、A1、B1 開關組觀察彈片切換與燈號變化！'
+  },
+  ...WIRES.slice(0, 4).map((w, idx) => ({ type: 'wire', wireId: w.id, wireIndex: idx, title: w.title, desc: w.desc })),
+  {
+    type: 'checkpoint', title: '🔍 階段檢查點：測試丙燈 (2⁰) 的 XOR 效果',
+    wireIndex: 3,
+    instruction: '【動手測試】請點擊畫布右下角的「A0」或右上角的「B0」開關組！',
+    desc: '這是一個由 a1、b1 組成的互斥或閘 (XOR)：單獨按下 A0 或 B0 其中一個會讓丙燈亮起 (1+0=1)；若同時按下 A0 與 B0，丙燈則會熄滅 (1+1=2，個位數歸零準備進位)！此時其他按鈕尚無作用。'
+  },
+  ...WIRES.slice(4, 8).map((w, idx) => ({ type: 'wire', wireId: w.id, wireIndex: 4 + idx, title: w.title, desc: w.desc })),
+  {
+    type: 'checkpoint', title: '🔍 階段檢查點：確認電源紅軌與進位/未進位訊號',
+    wireIndex: 7,
+    instruction: '【檢查線路】此時中央電源紅軌 (+) 會有紅 (a1的COM)、綠 (a2的COM) 兩條線。',
+    desc: '請試著同時按下 A0 與 B0：您會看到電流改走「進位線 (b2.NO 藍線)」；而只要沒同時按下 A0 與 B0，電流就會維持在右側紫色的「未進位線 (a2/b2 的 NC)」上！'
+  },
+  ...WIRES.slice(8, 12).map((w, idx) => ({ type: 'wire', wireId: w.id, wireIndex: 8 + idx, title: w.title, desc: w.desc })),
+  {
+    type: 'checkpoint', title: '🔍 階段檢查點：臨時將「乙1」接上乙燈長腳測試 XOR',
+    wireIndex: 11, tempMode: 'TEST_YI1',
+    instruction: '【臨時搭接測試】請點擊下方綠色按鈕，將還沒剝線的「乙1」暫時插上乙燈長腳！',
+    desc: '接上臨時測試線後，試著按下 A1 或 B1 任意一個，都會使乙燈亮起；同時按下 A1+B1 則因 XOR 使乙1斷電、乙燈關閉。更有趣的是：若此時同時按下 A0+B0，因為「未進位線」斷電，乙1 也會立刻失去電源！'
+  },
+  ...WIRES.slice(12, 17).map((w, idx) => ({ type: 'wire', wireId: w.id, wireIndex: 12 + idx, title: w.title, desc: w.desc })),
+  {
+    type: 'checkpoint', title: '🔍 階段檢查點：乙燈兩路控制 (XOR + XNOR)',
+    wireIndex: 16, tempMode: 'TEST_YI2_ONLY',
+    instruction: '【深度驗證】現在乙燈同時受「乙1 (沒進位XOR)」與「乙2 (有進位XNOR)」兩路控制！您也可以點擊下方按鈕單獨測試拔除乙1時的 XNOR 效果。',
+    desc: '• 當 A0、B0 沒同時按：乙2 沒電，乙燈由乙1 (XOR) 控制。\n• 當 A0、B0 同時按下 (個位進位)：乙1 斷電，乙燈改由乙2 (XNOR) 控制！此時 A1、B1 都不按 (0+0) 或都按 (1+1) 狀態相同，乙燈會亮；只按 A1 或 B1 其中一個，反而會把乙燈關掉！'
+  },
+  ...WIRES.slice(17, 20).map((w, idx) => ({ type: 'wire', wireId: w.id, wireIndex: 17 + idx, title: w.title, desc: w.desc })),
+  ...WIRES.slice(20, 23).map((w, idx) => ({ type: 'wire', wireId: w.id, wireIndex: 20 + idx, title: w.title, desc: w.desc })),
+  {
+    type: 'checkpoint', title: '🔍 階段檢查點：臨時將「甲2」接觸甲燈長腳測試 2+2=4',
+    wireIndex: 22, tempMode: 'TEST_JIA2',
+    instruction: '【臨時搭接測試】請點擊下方綠色按鈕，用「甲2」白線臨時接觸甲燈長腳！',
+    desc: '接上臨時測試線後，請同時按下 A1 + B1 (代表 2+2)：電流會從 e1.COM 經過 e1.NO 流到 e2.COM，再經由 e2.NO (甲2) 點亮甲燈 (2² = 4)，完美呈現 10₂ + 10₂ = 100₂！'
+  },
+  ...WIRES.slice(23, 28).map((w, idx) => ({ type: 'wire', wireId: w.id, wireIndex: 23 + idx, title: w.title, desc: w.desc })),
+  {
+    type: 'checkpoint', title: '🎉 全數接線完成！測試時間 (1+0 ~ 3+3 全組合驗證)',
+    wireIndex: 27,
+    instruction: '恭喜完成大一邏輯設計等級的純機械二位元加法器！全部 14 顆微動開關與所有邏輯閘 (XOR、XNOR、AND、OR) 已全數就位！',
+    desc: '請點擊畫布上的 A0、A1、B0、B1 開關組，或直接點擊右下角「全組合測試真值表」的任一列（如 3+1、3+2、3+3），驗證甲(4)、乙(2)、丙(1) 三顆燈號的二進位加法結果！'
+  }
+];
+
+// ============================================================================
+// 4. 狀態管理與自由模式資料結構
+// ============================================================================
+let simulatorMode = 'guided';   // 'guided' | 'free'
+let currentStepIdx = 0;         // 0 ~ 34 (顯示為 步驟 1 ~ 35)
+let connectedWires = new Set(); // 已接通的標準 wire ID 集合
+let customWires = [];           // 自由模式下學生自創的非標準接線 [{ id, from, to, color, path }]
+let wireHistory = [];           // 自由模式接線歷史 (供「撤銷最後一條線」使用)
+let selectedStartTerm = null;   // 目前已點選的第一個端點 ID
+let mouseSvgPt = { x: 0, y: 0 };
+let showCurrentFlow = true;
+let tempTestActive = false;
+
+const TRUTH_TABLE_DATA = [
+  { A0:1, A1:0, B0:0, B1:0, expr:'1 + 0 = 1', jia:0, yi:0, bing:1 },
+  { A0:0, A1:0, B0:1, B1:0, expr:'0 + 1 = 1', jia:0, yi:0, bing:1 },
+  { A0:0, A1:1, B0:0, B1:0, expr:'2 + 0 = 2', jia:0, yi:1, bing:0 },
+  { A0:0, A1:0, B0:0, B1:1, expr:'0 + 2 = 2', jia:0, yi:1, bing:0 },
+  { A0:1, A1:1, B0:0, B1:0, expr:'3 + 0 = 3', jia:0, yi:1, bing:1 },
+  { A0:1, A1:0, B0:0, B1:1, expr:'1 + 2 = 3', jia:0, yi:1, bing:1 },
+  { A0:0, A1:1, B0:1, B1:0, expr:'2 + 1 = 3', jia:0, yi:1, bing:1 },
+  { A0:0, A1:0, B0:1, B1:1, expr:'0 + 3 = 3', jia:0, yi:1, bing:1 },
+  { A0:0, A1:1, B0:0, B1:1, expr:'2 + 2 = 4', jia:1, yi:0, bing:0 },
+  { A0:1, A1:1, B0:1, B1:0, expr:'3 + 1 = 4', jia:1, yi:0, bing:0 },
+  { A0:1, A1:0, B0:1, B1:1, expr:'1 + 3 = 4', jia:1, yi:0, bing:0 },
+  { A0:1, A1:1, B0:0, B1:1, expr:'3 + 2 = 5', jia:1, yi:0, bing:1 },
+  { A0:0, A1:1, B0:1, B1:1, expr:'2 + 3 = 5', jia:1, yi:0, bing:1 },
+  { A0:1, A1:1, B0:1, B1:1, expr:'3 + 3 = 6', jia:1, yi:1, bing:0 }
+];
+
+// ============================================================================
+// 5. 真實圖論節點導通與流向解算器 (Graph BFS Continuity & Direction Solver)
+// ============================================================================
+function solveCircuitContinuity(overrideSwitches = null) {
+  const swState = overrideSwitches || switchGroups;
+  const adj = {};
+  const addDirEdge = (u, v) => {
+    if (!adj[u]) adj[u] = [];
+    adj[u].push(v);
+  };
+  const addBiEdge = (u, v) => {
+    addDirEdge(u, v);
+    addDirEdge(v, u);
+  };
+
+  // 1. 三顆 LED 短腳預設皆已與電源黑軌 (-) 導通
+  addBiEdge('PWR_NEG', 'LED_JIA_NEG');
+  addBiEdge('PWR_NEG', 'LED_YI_NEG');
+  addBiEdge('PWR_NEG', 'LED_BING_NEG');
+
+  // 2. 加入 14 顆微動開關內部彈片導通狀態 (透過內部節點 SW_INT_xx 追蹤進出方向)
+  Object.values(CLUSTERS).forEach(cl => {
+    const isPressed = swState[cl.id];
+    const swList = [cl.sw.up, cl.sw.down, cl.sw.left, cl.sw.right].filter(Boolean);
+    swList.forEach(swName => {
+      const comId = `${swName}.COM`;
+      const targetId = isPressed ? `${swName}.NO` : `${swName}.NC`;
+      const intNode = `SW_INT_${swName}`;
+      if (TERMINALS[comId] && TERMINALS[targetId]) {
+        addBiEdge(comId, intNode);
+        addBiEdge(intNode, targetId);
+      }
+    });
+  });
+
+  // 3. 加入已接上的標準導線
+  const stepObj = STEPS[currentStepIdx];
+  const isIsolateYi1 = (simulatorMode === 'guided' && stepObj && stepObj.tempMode === 'TEST_YI2_ONLY' && tempTestActive);
+  const hasCustom = customWires.length > 0;
+
+  WIRES.forEach(w => {
+    if (!connectedWires.has(w.id)) return;
+    if (isIsolateYi1 && w.id === 'W12') return;
+
+    // 在無自創線時，對匯流至乙燈/甲燈的並聯輸出端採單向匯流，避免「乙1」逆向點亮沒電的「乙2」(或 2+2 逆向點亮 f1/f2)
+    if (!hasCustom && (w.id === 'W23' || w.id === 'W26' || w.id === 'W27')) {
+      addDirEdge(w.from, w.to);
+    } else if (!hasCustom && w.id === 'W16') {
+      addDirEdge('d2.COM', 'NODE_YI2');
+      addDirEdge('NODE_YI1', 'NODE_YI2');
+    } else if (w.viaNode) {
+      addBiEdge(w.from, w.viaNode);
+      addBiEdge(w.to, w.viaNode);
+    } else {
+      addBiEdge(w.from, w.to);
+    }
+  });
+
+  // 4. 加入自由模式下學生的自創導線
+  customWires.forEach(cw => {
+    addBiEdge(cw.from, cw.to);
+  });
+
+  // 5. 加入檢查點臨時測試線
+  if (simulatorMode === 'guided' && tempTestActive && stepObj) {
+    if (stepObj.tempMode === 'TEST_YI1') {
+      addDirEdge('NODE_YI1', 'LED_YI_POS');
+    } else if (stepObj.tempMode === 'TEST_JIA2') {
+      addDirEdge('NODE_JIA2', 'LED_JIA_POS');
+    }
+  }
+
+  // 6. 從 PWR_POS (+) 執行 BFS 搜尋所有帶正電節點與傳遞距離 (nodeDist)
+  const poweredNodes = new Set(['PWR_POS']);
+  const nodeDist = { 'PWR_POS': 0 };
+  const queue = ['PWR_POS'];
+  while (queue.length > 0) {
+    const curr = queue.shift();
+    const neighbors = adj[curr] || [];
+    for (const nxt of neighbors) {
+      if (!poweredNodes.has(nxt)) {
+        poweredNodes.add(nxt);
+        nodeDist[nxt] = nodeDist[curr] + 1;
+        queue.push(nxt);
+      }
+    }
+  }
+
+  const isShortCircuit = poweredNodes.has('PWR_NEG');
+
+  return {
+    poweredNodes,
+    nodeDist,
+    isShortCircuit,
+    ledJia: !isShortCircuit && poweredNodes.has('LED_JIA_POS'),
+    ledYi: !isShortCircuit && poweredNodes.has('LED_YI_POS'),
+    ledBing: !isShortCircuit && poweredNodes.has('LED_BING_POS')
+  };
+}
+
+// ============================================================================
+// 6. 幾何直角路徑切分工具
+// ============================================================================
+function pointsToOrthoPath(pts) {
+  return pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]} ${p[1]}`).join(' ');
+}
+
+function splitOrthoPathAtPin(pts, pinPos) {
+  const [px, py] = pinPos;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [x1, y1] = pts[i];
+    const [x2, y2] = pts[i + 1];
+    const onVert = (Math.abs(x1 - x2) < 1 && Math.abs(px - x1) < 1 && py >= Math.min(y1, y2) - 1 && py <= Math.max(y1, y2) + 1);
+    const onHoriz = (Math.abs(y1 - y2) < 1 && Math.abs(py - y1) < 1 && px >= Math.min(x1, x2) - 1 && px <= Math.max(x1, x2) + 1);
+    if (onVert || onHoriz) {
+      const path1 = [...pts.slice(0, i + 1), [px, py]];
+      const path2 = [[px, py], ...pts.slice(i + 1)];
+      return { path1, path2 };
+    }
+  }
+  const mid = Math.floor(pts.length / 2);
+  return {
+    path1: [...pts.slice(0, mid), [px, py]],
+    path2: [[px, py], ...pts.slice(mid)]
+  };
+}
+
+function buildCustomOrthoPath(t1, t2, seedOffset = 0) {
+  const x1 = t1.x, y1 = t1.y;
+  const x2 = t2.x, y2 = t2.y;
+  if (x1 === x2 || y1 === y2) {
+    return [[x1, y1], [x2, y2]];
+  }
+  const midX = Math.round((x1 + x2) / 2) + ((seedOffset % 5) - 2) * 8;
+  return [[x1, y1], [midX, y1], [midX, y2], [x2, y2]];
+}
+
+// ============================================================================
+// 7. SVG 電路板視覺渲染引擎
+// ============================================================================
+const svgEl = document.getElementById('circuit-svg');
+
+function renderBoard() {
+  const sim = solveCircuitContinuity();
+  const { poweredNodes, nodeDist, isShortCircuit, ledJia, ledYi, ledBing } = sim;
+
+  const scBanner = document.getElementById('short-circuit-banner');
+  if (isShortCircuit) scBanner.classList.add('show');
+  else scBanner.classList.remove('show');
+
+  const stepObj = STEPS[currentStepIdx];
+  const activeWire = (simulatorMode === 'guided' && stepObj && stepObj.type === 'wire') ? WIRES[stepObj.wireIndex] : null;
+  const needConnect = activeWire && !connectedWires.has(activeWire.id);
+
+  let targetEndpoints = [];
+  if (simulatorMode === 'guided' && needConnect) {
+    targetEndpoints = [activeWire.from, activeWire.to];
+  }
+
+  let html = `
+    <defs>
+      <filter id="led-glow-red" x="-60%" y="-60%" width="220%" height="220%">
+        <feGaussianBlur stdDeviation="8" result="blur" />
+        <feMerge>
+          <feMergeNode in="blur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+      <filter id="wire-glow" x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur stdDeviation="3" result="blur" />
+        <feMerge>
+          <feMergeNode in="blur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+    </defs>
+
+    <!-- 上下底板分區背景 -->
+    <rect x="0" y="0" width="1380" height="490" fill="#f3f0ff" opacity="0.65" />
+    <rect x="0" y="490" width="1380" height="450" fill="#fdf2f8" opacity="0.65" />
+    <line x1="0" y1="490" x2="1380" y2="490" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="8 8" />
+  `;
+
+  // --- A. 繪製預設已接好的三顆 LED 短腳回電源黑軌 (-) 咖啡色線 (通道 y=124) ---
+  const gndStaticPaths = [
+    [[345,112], [345,124], [562,124], [562,472], [635,472]],
+    [[705,112], [705,124], [562,124]],
+    [[1065,112], [1065,124], [705,124]]
+  ];
+  gndStaticPaths.forEach(pts => {
+    const d = pointsToOrthoPath(pts);
+    html += `<path d="${d}" fill="none" stroke="#1e293b" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>`;
+    html += `<path d="${d}" fill="none" stroke="${WIRE_COLORS.brown.hex}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>`;
+  });
+
+  // 若任何一顆 LED 點亮，繪製由該 LED 短腳 (-) 流回黑軌 (-) 的回流電流動畫
+  if (showCurrentFlow) {
+    if (ledJia) {
+      const d = pointsToOrthoPath([[345,112], [345,124], [562,124], [562,472], [635,472]]);
+      html += `<path d="${d}" fill="none" stroke="#fef08a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="wire-live-flow"/>`;
+    }
+    if (ledYi) {
+      const d = pointsToOrthoPath([[705,112], [705,124], [562,124], [562,472], [635,472]]);
+      html += `<path d="${d}" fill="none" stroke="#fef08a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="wire-live-flow"/>`;
+    }
+    if (ledBing) {
+      const d = pointsToOrthoPath([[1065,112], [1065,124], [562,124], [562,472], [635,472]]);
+      html += `<path d="${d}" fill="none" stroke="#fef08a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="wire-live-flow"/>`;
+    }
+  }
+
+  // --- B. 繪製已連接的標準導線與正確物理流向的電流動畫 ---
+  const isIsolateYi1 = (simulatorMode === 'guided' && stepObj && stepObj.tempMode === 'TEST_YI2_ONLY' && tempTestActive);
+
+  WIRES.forEach(w => {
+    if (!connectedWires.has(w.id)) return;
+    const isLatestStepWire = (simulatorMode === 'guided') && ((activeWire && activeWire.id === w.id) || (STEPS[currentStepIdx].wireIndex === WIRES.indexOf(w)));
+    const d = pointsToOrthoPath(w.path);
+    const colHex = WIRE_COLORS[w.color].hex;
+    const wireOpacity = (isIsolateYi1 && w.id === 'W12') ? 0.25 : 1;
+    const clickAttr = (simulatorMode === 'free') ? `class="wire-deletable" onclick="removeWireInFreeMode('std', '${w.id}', event)"` : '';
+
+    html += `<g opacity="${wireOpacity}" ${clickAttr}>`;
+    if (simulatorMode === 'free') {
+      html += `<title>點擊刪除此條導線 (${TERMINALS[w.from].label} ↔ ${TERMINALS[w.to].label})</title>`;
+    }
+
+    // 特殊處理 W16：包含綠色「乙2」段與紅色「乙1延伸至扭線」段
+    if (w.id === 'W16') {
+      const dYi1Branch = pointsToOrthoPath(w.yi1BranchPath);
+      html += `<path d="${dYi1Branch}" fill="none" stroke="#0f172a" stroke-width="${isLatestStepWire ? 9 : 7.5}" stroke-linecap="round" stroke-linejoin="round"/>`;
+      html += `<path d="${dYi1Branch}" fill="none" stroke="${WIRE_COLORS.red.hex}" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>`;
+      html += `<path d="${d}" fill="none" stroke="#0f172a" stroke-width="${isLatestStepWire ? 9 : 7.5}" stroke-linecap="round" stroke-linejoin="round"/>`;
+      html += `<path d="${d}" fill="none" stroke="${colHex}" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+      if (showCurrentFlow) {
+        if (!isIsolateYi1 && poweredNodes.has('NODE_YI1') && poweredNodes.has('NODE_YI2')) {
+          html += `<path d="${dYi1Branch}" fill="none" stroke="#fef08a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="wire-live-flow" filter="url(#wire-glow)"/>`;
+        }
+        if (poweredNodes.has('d2.COM') && poweredNodes.has('NODE_YI2')) {
+          html += `<path d="${d}" fill="none" stroke="#fef08a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="wire-live-flow" filter="url(#wire-glow)"/>`;
+        }
+      }
+    } else {
+      html += `<path d="${d}" fill="none" stroke="#0f172a" stroke-width="${isLatestStepWire ? 9 : 7.5}" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+      if (w.color2 && w.pinPos) {
+        const col2Hex = WIRE_COLORS[w.color2].hex;
+        const { path1, path2 } = splitOrthoPathAtPin(w.path, w.pinPos);
+        const d1 = pointsToOrthoPath(path1);
+        const d2 = pointsToOrthoPath(path2);
+        html += `<path d="${d1}" fill="none" stroke="${colHex}" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>`;
+        html += `<path d="${d2}" fill="none" stroke="${col2Hex}" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>`;
+      } else {
+        html += `<path d="${d}" fill="none" stroke="${colHex}" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>`;
+      }
+
+      // 繪製正確物理流向的電流高亮動畫
+      const isPowered = showCurrentFlow && (poweredNodes.has(w.from) && poweredNodes.has(w.to));
+      if (isPowered) {
+        if (w.id === 'W7') {
+          // W7 為 a2.NC 與 b2.NC 匯流至 NODE_NO_CARRY [1245,515]
+          const a2Feeding = !switchGroups.A0;
+          const branchA = a2Feeding
+            ? [[1085,732], [1245,732], [1245,515]]
+            : [[1245,515], [1245,732], [1085,732]];
+          const branchB = a2Feeding
+            ? [[1245,515], [1245,332], [1085,332]]
+            : [[1085,332], [1245,332], [1245,515]];
+          html += `<path d="${pointsToOrthoPath(branchA)}" fill="none" stroke="#fef08a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="wire-live-flow" filter="url(#wire-glow)"/>`;
+          html += `<path d="${pointsToOrthoPath(branchB)}" fill="none" stroke="#fef08a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="wire-live-flow" filter="url(#wire-glow)"/>`;
+        } else {
+          const flowPts = w.flowReverse ? [...w.path].reverse() : w.path;
+          const flowD = pointsToOrthoPath(flowPts);
+          html += `<path d="${flowD}" fill="none" stroke="#fef08a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="wire-live-flow" filter="url(#wire-glow)"/>`;
+        }
+      }
+    }
+
+    // 繪製排針符號 (黑色小長方形)
+    if (w.method === 'pin' && w.pinPos) {
+      const [px, py] = w.pinPos;
+      html += `
+        <g transform="translate(${px},${py})">
+          <rect x="-7" y="-14" width="14" height="28" rx="2" fill="#0f172a" stroke="#f8fafc" stroke-width="1.5"/>
+          <line x1="0" y1="-20" x2="0" y2="-14" stroke="#94a3b8" stroke-width="3"/>
+          <line x1="0" y1="14" x2="0" y2="20" stroke="#94a3b8" stroke-width="3"/>
+        </g>
+      `;
+    }
+
+    // 繪製扭線符號 (紅色雙三角菱形)
+    if (w.method === 'twist' && w.twistPos) {
+      const [tx, ty] = w.twistPos;
+      html += `
+        <g transform="translate(${tx},${ty})">
+          <polygon points="0,-13 18,0 0,13 -18,0" fill="#9ca3af" stroke="#dc2626" stroke-width="2.5"/>
+          <line x1="0" y1="-12" x2="0" y2="12" stroke="#dc2626" stroke-width="2.5"/>
+        </g>
+      `;
+    }
+    html += `</g>`;
+  });
+
+  // --- B2. 繪製自由模式下學生的自創導線 (自動依 BFS 距離決定電流動畫流向) ---
+  customWires.forEach(cw => {
+    const isPowered = showCurrentFlow && (poweredNodes.has(cw.from) && poweredNodes.has(cw.to));
+    const d = pointsToOrthoPath(cw.path);
+    const colHex = WIRE_COLORS[cw.color] ? WIRE_COLORS[cw.color].hex : '#38bdf8';
+    const clickAttr = (simulatorMode === 'free') ? `class="wire-deletable" onclick="removeWireInFreeMode('custom', '${cw.id}', event)"` : '';
+
+    html += `<g ${clickAttr}>`;
+    html += `<title>自創接線：${TERMINALS[cw.from].label} ↔ ${TERMINALS[cw.to].label} (點擊可刪除)</title>`;
+    html += `<path d="${d}" fill="none" stroke="#0f172a" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>`;
+    html += `<path d="${d}" fill="none" stroke="${colHex}" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>`;
+    if (isPowered) {
+      const dFrom = nodeDist[cw.from] ?? 999;
+      const dTo = nodeDist[cw.to] ?? 999;
+      const flowPts = (dTo < dFrom) ? [...cw.path].reverse() : cw.path;
+      html += `<path d="${pointsToOrthoPath(flowPts)}" fill="none" stroke="#fef08a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="wire-live-flow" filter="url(#wire-glow)"/>`;
+    }
+    html += `</g>`;
+  });
+
+  // --- C. 繪製檢查點臨時測試虛線 (由下方通道向上接至 LED 長腳) ---
+  if (simulatorMode === 'guided' && tempTestActive && stepObj) {
+    if (stepObj.tempMode === 'TEST_YI1') {
+      const tempD = pointsToOrthoPath([[115,195], [115,148], [675,148], [675,112]]);
+      html += `<path d="${tempD}" fill="none" stroke="#10b981" stroke-width="5" stroke-dasharray="10 6" stroke-linecap="round"/>`;
+      html += `<rect x="330" y="134" width="215" height="24" rx="5" fill="#065f46" stroke="#10b981" stroke-width="1.5"/>`;
+      html += `<text x="437" y="150" fill="#ecfdf5" font-size="12" font-weight="bold" text-anchor="middle">🔌 臨時測試：乙1 接觸乙燈長腳</text>`;
+    } else if (stepObj.tempMode === 'TEST_JIA2') {
+      const tempD = pointsToOrthoPath([[540,485], [540,136], [315,136], [315,112]]);
+      html += `<path d="${tempD}" fill="none" stroke="#10b981" stroke-width="5" stroke-dasharray="10 6" stroke-linecap="round"/>`;
+      html += `<rect x="330" y="122" width="205" height="24" rx="5" fill="#065f46" stroke="#10b981" stroke-width="1.5"/>`;
+      html += `<text x="432" y="138" fill="#ecfdf5" font-size="12" font-weight="bold" text-anchor="middle">🔌 臨時測試：甲2 接觸甲燈長腳</text>`;
+    }
+  }
+
+  // --- D. 若正在拖曳配對接線，畫出滑鼠即時直角預覽線 ---
+  if (selectedStartTerm && TERMINALS[selectedStartTerm]) {
+    const st = TERMINALS[selectedStartTerm];
+    const midX = Math.round((st.x + mouseSvgPt.x) / 2);
+    const previewD = `M ${st.x} ${st.y} L ${midX} ${st.y} L ${midX} ${mouseSvgPt.y} L ${mouseSvgPt.x} ${mouseSvgPt.y}`;
+    html += `<path d="${previewD}" fill="none" stroke="#0284c7" stroke-width="4" stroke-dasharray="7 5" pointer-events="none"/>`;
+  }
+
+  // --- E. 繪製中央壓接端子 (標註黑軌 - 與紅軌 +) ---
+  html += `
+    <g id="power-module">
+      <rect x="622" y="452" width="112" height="76" rx="6" fill="#ffffff" stroke="#1e293b" stroke-width="2.5"/>
+      <line x1="622" y1="490" x2="734" y2="490" stroke="#1e293b" stroke-width="2"/>
+      <rect x="652" y="458" width="76" height="26" rx="4" fill="#1e293b"/>
+      <text x="690" y="476" font-size="13.5" font-weight="900" fill="#f8fafc" text-anchor="middle">黑軌 ( - )</text>
+      <rect x="652" y="496" width="76" height="26" rx="4" fill="#dc2626"/>
+      <text x="690" y="514" font-size="13.5" font-weight="900" fill="#ffffff" text-anchor="middle">紅軌 ( + )</text>
+      <text x="678" y="443" font-size="12.5" font-weight="900" fill="#334155" text-anchor="middle">中央電源壓接端子</text>
+    </g>
+  `;
+
+  // --- F. 繪製最上方三顆 LED 燈：左甲(2²)、中乙(2¹)、右丙(2⁰) ---
+  const leds = [
+    { name: '甲', bit: '2² (數值 4)', cx: 330, cy: 52, posId: 'LED_JIA_POS', negId: 'LED_JIA_NEG', on: ledJia },
+    { name: '乙', bit: '2¹ (數值 2)', cx: 690, cy: 52, posId: 'LED_YI_POS',  negId: 'LED_YI_NEG',  on: ledYi },
+    { name: '丙', bit: '2⁰ (數值 1)', cx: 1050, cy: 52, posId: 'LED_BING_POS', negId: 'LED_BING_NEG', on: ledBing }
+  ];
+
+  leds.forEach(led => {
+    const bulbFill = led.on ? '#ff2a2a' : '#cbd5e1';
+    const bulbStroke = led.on ? '#fef08a' : '#475569';
+    const glowAttr = led.on ? 'filter="url(#led-glow-red)"' : '';
+    html += `
+      <g>
+        <rect x="${led.cx - 105}" y="14" width="210" height="44" rx="8" fill="${led.on ? '#7f1d1d' : '#1e293b'}" stroke="${led.on ? '#ef4444' : '#475569'}" stroke-width="2"/>
+        <text x="${led.cx - 42}" y="42" font-size="20" font-weight="900" fill="${led.on ? '#fde047' : '#f8fafc'}" text-anchor="middle">${led.name}燈</text>
+        <text x="${led.cx + 35}" y="41" font-size="14" font-weight="bold" fill="${led.on ? '#fecaca' : '#94a3b8'}" text-anchor="middle">${led.bit}</text>
+
+        <line x1="${led.cx - 15}" y1="84" x2="${led.cx - 15}" y2="112" stroke="#64748b" stroke-width="4"/>
+        <line x1="${led.cx + 15}" y1="84" x2="${led.cx + 15}" y2="112" stroke="#64748b" stroke-width="4"/>
+        <text x="${led.cx - 24}" y="104" font-size="11" font-weight="bold" fill="#b91c1c" text-anchor="end">長腳(+)</text>
+        <text x="${led.cx + 24}" y="104" font-size="11" font-weight="bold" fill="#78350f" text-anchor="start">短腳(-)</text>
+
+        <circle cx="${led.cx}" cy="74" r="16" fill="${bulbFill}" stroke="${bulbStroke}" stroke-width="2.5" ${glowAttr}/>
+        ${led.on ? `<circle cx="${led.cx - 5}" cy="69" r="5" fill="#ffffff" opacity="0.8"/>` : ''}
+      </g>
+    `;
+  });
+
+  // --- G. 繪製四大微動開關組 (B1, B0, A1, A0) 與固定杜邦短引線 ---
+  Object.values(CLUSTERS).forEach(cl => {
+    const { cx, cy, sw, id, label } = cl;
+    const isPressed = switchGroups[id];
+
+    // 1. 畫每個開關腳位延伸出的灰針腳與彩色固定杜邦短引線 (含正確進出方向的電流動畫)
+    const pinTerms = Object.values(TERMINALS).filter(t => t.group === id);
+    pinTerms.forEach(t => {
+      const cHex = WIRE_COLORS[t.color].hex;
+      const isPinPowered = showCurrentFlow && poweredNodes.has(t.id);
+      const midX = (t.pinX + t.x) / 2;
+      const midY = (t.pinY + t.y) / 2;
+      html += `
+        <line x1="${t.pinX}" y1="${t.pinY}" x2="${midX}" y2="${midY}" stroke="#94a3b8" stroke-width="5" stroke-linecap="butt"/>
+        <line x1="${midX}" y1="${midY}" x2="${t.x}" y2="${t.y}" stroke="#0f172a" stroke-width="7.5" stroke-linecap="round"/>
+        <line x1="${midX}" y1="${midY}" x2="${t.x}" y2="${t.y}" stroke="${cHex}" stroke-width="4.8" stroke-linecap="round"/>
+      `;
+      if (isPinPowered) {
+        const intNode = `SW_INT_${t.swName}`;
+        const dTerm = nodeDist[t.id] ?? 999;
+        const dInt = nodeDist[intNode] ?? 999;
+        // 若外部端點距離電源較近 (或開關內部未導通)，電流由外部端點 (t.x, t.y) 流入開關腳位 (t.pinX, t.pinY)
+        const flowsIntoSwitch = (dTerm <= dInt);
+        const sx = flowsIntoSwitch ? t.x : t.pinX;
+        const sy = flowsIntoSwitch ? t.y : t.pinY;
+        const ex = flowsIntoSwitch ? t.pinX : t.x;
+        const ey = flowsIntoSwitch ? t.pinY : t.y;
+        html += `<path d="M ${sx} ${sy} L ${ex} ${ey}" fill="none" stroke="#fef08a" stroke-width="2.6" class="wire-live-flow"/>`;
+      }
+    });
+
+    // 不接線的空 NC 腳
+    html += `<line x1="${cx - 46}" y1="${cy + 26}" x2="${cx - 46}" y2="${cy + 75}" stroke="#94a3b8" stroke-width="5"/>`;
+    if (sw.right) {
+      html += `<line x1="${cx + 36}" y1="${cy - 26}" x2="${cx + 36}" y2="${cy - 75}" stroke="#94a3b8" stroke-width="5"/>`;
+    }
+
+    // 2. 微動開關外殼與中心黑色連動按壓塊
+    html += `<g class="switch-cluster-btn" onclick="toggleSwitchGroup('${id}')">`;
+    html += `<rect x="${cx - 26}" y="${cy - 26}" width="52" height="52" fill="${isPressed ? '#2563eb' : '#0f172a'}"/>`;
+
+    // 上直立開關 (a1, b1, c1, d1)
+    html += `
+      <rect class="cluster-bg" x="${cx - 22}" y="${cy - 118}" width="44" height="96" fill="#e2e8f0" stroke="#0f172a" stroke-width="2.5"/>
+      <text x="${cx}" y="${cy - 76}" font-size="24" font-weight="900" fill="#dc2626" text-anchor="middle">${sw.up[0]}</text>
+      <text x="${cx}" y="${cy - 48}" font-size="24" font-weight="900" fill="#dc2626" text-anchor="middle">${sw.up[1]}</text>
+      <text x="${cx - 28}" y="${cy - 110}" font-size="11" font-weight="900" fill="#0f172a" text-anchor="end">COM</text>
+      <text x="${cx - 28}" y="${cy - 77}" font-size="11" font-weight="900" fill="#0f172a" text-anchor="end">NO</text>
+      <text x="${cx - 28}" y="${cy - 44}" font-size="11" font-weight="900" fill="#0f172a" text-anchor="end">NC</text>
+    `;
+
+    // 下直立開關 (a2, b2, c2, d2)
+    html += `
+      <rect class="cluster-bg" x="${cx - 22}" y="${cy + 22}" width="44" height="96" fill="#e2e8f0" stroke="#0f172a" stroke-width="2.5"/>
+      <text x="${cx}" y="${cy + 62}" font-size="24" font-weight="900" fill="#dc2626" text-anchor="middle">${sw.down[0]}</text>
+      <text x="${cx}" y="${cy + 90}" font-size="24" font-weight="900" fill="#dc2626" text-anchor="middle">${sw.down[1]}</text>
+      <text x="${cx + 28}" y="${cy + 28}" font-size="11" font-weight="900" fill="#0f172a" text-anchor="start">NC</text>
+      <text x="${cx + 28}" y="${cy + 61}" font-size="11" font-weight="900" fill="#0f172a" text-anchor="start">NO</text>
+      <text x="${cx + 28}" y="${cy + 93}" font-size="11" font-weight="900" fill="#0f172a" text-anchor="start">COM</text>
+    `;
+
+    // 左橫置開關 (a3, b3, e1, e2)
+    html += `
+      <rect class="cluster-bg" x="${cx - 128}" y="${cy - 18}" width="102" height="44" fill="#e2e8f0" stroke="#0f172a" stroke-width="2.5"/>
+      <text x="${cx - 77}" y="${cy + 12}" font-size="24" font-weight="900" fill="#dc2626" text-anchor="middle">${sw.left}</text>
+      <text x="${cx - 126}" y="${cy + 42}" font-size="10.5" font-weight="900" fill="#0f172a" text-anchor="end">COM</text>
+      <text x="${cx - 88}" y="${cy + 42}" font-size="10.5" font-weight="900" fill="#0f172a" text-anchor="end">NO</text>
+      <text x="${cx - 52}" y="${cy + 42}" font-size="10.5" font-weight="900" fill="#64748b" text-anchor="end">NC</text>
+    `;
+
+    // 右橫置開關 (f1, f2)
+    if (sw.right) {
+      html += `
+        <rect class="cluster-bg" x="${cx + 26}" y="${cy - 26}" width="102" height="44" fill="#e2e8f0" stroke="#0f172a" stroke-width="2.5"/>
+        <text x="${cx + 77}" y="${cy + 4}" font-size="24" font-weight="900" fill="#dc2626" text-anchor="middle">${sw.right}</text>
+        <text x="${cx + 43}" y="${cy - 34}" font-size="10.5" font-weight="900" fill="#64748b" text-anchor="start">NC</text>
+        <text x="${cx + 78}" y="${cy - 34}" font-size="10.5" font-weight="900" fill="#0f172a" text-anchor="start">NO</text>
+        <text x="${cx + 114}" y="${cy - 34}" font-size="10.5" font-weight="900" fill="#0f172a" text-anchor="start">COM</text>
+      `;
+    }
+
+    // 開關組大標示牌
+    const badgeFill = isPressed ? '#1d4ed8' : '#0f172a';
+    const badgeStroke = isPressed ? '#60a5fa' : '#475569';
+    html += `
+      <g transform="translate(${cx + 58}, ${cy + 148})">
+        <rect x="-52" y="-19" width="132" height="36" rx="8" fill="${badgeFill}" stroke="${badgeStroke}" stroke-width="2.5"/>
+        <text x="-16" y="6" font-size="22" font-weight="900" fill="#ffffff" text-anchor="middle">${label}</text>
+        <text x="43" y="-3" font-size="10.5" font-weight="bold" fill="${isPressed ? '#fde047' : '#94a3b8'}" text-anchor="middle">${isPressed ? '【已按下 1】' : '【放開 0】'}</text>
+        <text x="43" y="11" font-size="10" font-weight="bold" fill="#cbd5e1" text-anchor="middle">${isPressed ? '導通 NO' : '導通 NC'}</text>
+      </g>
+    `;
+    html += `</g>`;
+  });
+
+  // --- H. 繪製中繼標籤節點 (未進位線、進位線、乙1、乙2、甲1、甲2) ---
+  const tagNodes = [
+    { id: 'NODE_NO_CARRY', showAfterWire: 'W7',  dx: 0, dy: -26 },
+    { id: 'NODE_CARRY',    showAfterWire: 'W8',  dx: 0, dy: -22 },
+    { id: 'NODE_YI1',      showAfterWire: 'W12', dx: 0, dy: -22 },
+    { id: 'NODE_YI2',      showAfterWire: 'W16', dx: -48, dy: 0 },
+    { id: 'NODE_JIA1',     showAfterWire: 'W20', dx: 0, dy: -22 },
+    { id: 'NODE_JIA2',     showAfterWire: 'W23', dx: -42, dy: -18 }
+  ];
+
+  tagNodes.forEach(tn => {
+    const t = TERMINALS[tn.id];
+    const usedInCustom = customWires.some(cw => cw.from === tn.id || cw.to === tn.id);
+    const isVisible = (simulatorMode === 'free') || connectedWires.has(tn.showAfterWire) || targetEndpoints.includes(tn.id) || usedInCustom;
+    if (!isVisible) return;
+    const isPowered = showCurrentFlow && poweredNodes.has(tn.id);
+    html += `
+      <g transform="translate(${t.x + tn.dx}, ${t.y + tn.dy})">
+        <rect x="-42" y="-13" width="84" height="24" rx="5" fill="${isPowered ? '#fef08a' : '#ffffff'}" stroke="#dc2626" stroke-width="2"/>
+        <text x="0" y="4" font-size="12.5" font-weight="900" fill="#dc2626" text-anchor="middle">${t.tagText}</text>
+      </g>
+    `;
+  });
+
+  // --- I. 繪製所有可點擊端點圓點與當前目標金色呼吸光圈 ---
+  Object.values(TERMINALS).forEach(t => {
+    if (t.isTag) {
+      const usedInCustom = customWires.some(cw => cw.from === t.id || cw.to === t.id);
+      const relevant = (simulatorMode === 'free') || targetEndpoints.includes(t.id) || usedInCustom ||
+        WIRES.some(w => connectedWires.has(w.id) && (w.from === t.id || w.to === t.id || w.viaNode === t.id));
+      if (!relevant) return;
+    }
+
+    const isTarget = targetEndpoints.includes(t.id);
+    const isSelected = (selectedStartTerm === t.id);
+    const isPowered = showCurrentFlow && poweredNodes.has(t.id);
+    const cHex = WIRE_COLORS[t.color] ? WIRE_COLORS[t.color].hex : '#ffffff';
+
+    if (isTarget && !isSelected) {
+      html += `<circle cx="${t.x}" cy="${t.y}" r="12" class="target-ring"/>`;
+    }
+    if (isSelected) {
+      html += `<circle cx="${t.x}" cy="${t.y}" r="14" class="selected-ring"/>`;
+    }
+
+    html += `
+      <circle cx="${t.x}" cy="${t.y}" r="${isTarget || simulatorMode === 'free' ? 7 : 5.5}"
+        fill="${isPowered ? '#fde047' : cHex}"
+        stroke="#0f172a" stroke-width="2"
+        class="terminal-hit"
+        onclick="handleTerminalClick('${t.id}', event)">
+        <title>${t.label}</title>
+      </circle>
+    `;
+  });
+
+  svgEl.innerHTML = html;
+  updateSidePanelAndReadout(sim);
+}
+
+// ============================================================================
+// 8. 端點點擊互動邏輯 (同時支援「引導模式」與「自由模式」)
+// ============================================================================
+svgEl.addEventListener('mousemove', (e) => {
+  if (!selectedStartTerm) return;
+  const pt = svgEl.createSVGPoint();
+  pt.x = e.clientX;
+  pt.y = e.clientY;
+  const cursorPt = pt.matrixTransform(svgEl.getScreenCTM().inverse());
+  mouseSvgPt = { x: Math.round(cursorPt.x), y: Math.round(cursorPt.y) };
+  renderBoard();
+});
+
+function handleTerminalClick(termId, event) {
+  if (event) event.stopPropagation();
+
+  // ---------------- 【自由模式】任意端點配對接線 ----------------
+  if (simulatorMode === 'free') {
+    if (!selectedStartTerm) {
+      selectedStartTerm = termId;
+      mouseSvgPt = { x: TERMINALS[termId].x, y: TERMINALS[termId].y };
+      showToast(`🛠️ [自由模式] 已選起點「${TERMINALS[termId].label}」，請點擊任意目標端點完成接線！`);
+      renderBoard();
+      return;
+    }
+
+    if (termId === selectedStartTerm) {
+      selectedStartTerm = null;
+      renderBoard();
+      return;
+    }
+
+    const fromId = selectedStartTerm;
+    const toId = termId;
+    selectedStartTerm = null;
+
+    const matchedStdWire = WIRES.find(w =>
+      (w.from === fromId && w.to === toId) || (w.from === toId && w.to === fromId)
+    );
+
+    if (matchedStdWire) {
+      if (connectedWires.has(matchedStdWire.id)) {
+        showToast(`⚠️ 這兩個端點已經有接線囉！（點擊導線可將其刪除）`);
+        renderBoard();
+        return;
+      }
+      connectedWires.add(matchedStdWire.id);
+      wireHistory.push({ type: 'std', id: matchedStdWire.id });
+      showToast(`✅ 成功連接：${TERMINALS[fromId].label} ↔ ${TERMINALS[toId].label}`);
+    } else {
+      const existsCustom = customWires.some(cw =>
+        (cw.from === fromId && cw.to === toId) || (cw.from === toId && cw.to === fromId)
+      );
+      if (existsCustom) {
+        showToast(`⚠️ 這兩個端點已經有自創接線囉！`);
+        renderBoard();
+        return;
+      }
+      const newId = 'CW_' + Date.now();
+      const t1 = TERMINALS[fromId];
+      const t2 = TERMINALS[toId];
+      const orthoPath = buildCustomOrthoPath(t1, t2, customWires.length);
+      customWires.push({
+        id: newId,
+        from: fromId,
+        to: toId,
+        color: t1.color || 'blue',
+        path: orthoPath
+      });
+      wireHistory.push({ type: 'custom', id: newId });
+      showToast(`🛠️ 已建立自創接線：${t1.label} ↔ ${t2.label}`);
+    }
+    renderBoard();
+    return;
+  }
+
+  // ---------------- 【引導模式】依步驟配對接線 ----------------
+  const stepObj = STEPS[currentStepIdx];
+  if (!stepObj || stepObj.type !== 'wire') {
+    showToast(`💡 目前是檢查點/說明步驟，請點擊右側「下一步」繼續接線，或直接按 A0~B1 測試開關！`);
+    return;
+  }
+
+  const activeWire = WIRES[stepObj.wireIndex];
+  if (connectedWires.has(activeWire.id)) {
+    showToast(`✅ 此步驟線路已接好！請點選「下一步」推進。`);
+    return;
+  }
+
+  const validTargets = [activeWire.from, activeWire.to];
+
+  if (!selectedStartTerm) {
+    if (validTargets.includes(termId)) {
+      selectedStartTerm = termId;
+      mouseSvgPt = { x: TERMINALS[termId].x, y: TERMINALS[termId].y };
+      showToast(`🎯 已選擇起點「${TERMINALS[termId].label}」，請點擊另一個閃爍目標端點完成接線！`);
+      renderBoard();
+    } else {
+      const clickedName = TERMINALS[termId] ? TERMINALS[termId].label : termId;
+      showToast(`⚠️ 點錯腳位囉！您點到了「${clickedName}」，本步需連接「${TERMINALS[activeWire.from].label}」與「${TERMINALS[activeWire.to].label}」`);
+    }
+    return;
+  }
+
+  if (termId === selectedStartTerm) {
+    selectedStartTerm = null;
+    renderBoard();
+    return;
+  }
+
+  if (validTargets.includes(termId) && termId !== selectedStartTerm) {
+    selectedStartTerm = null;
+    connectedWires.add(activeWire.id);
+    showToast(`🎉 成功接上：${TERMINALS[activeWire.from].label} ➔ ${TERMINALS[activeWire.to].label}！`);
+    if (currentStepIdx < STEPS.length - 1) {
+      currentStepIdx++;
+    }
+    renderBoard();
+  } else {
+    const clickedName = TERMINALS[termId] ? TERMINALS[termId].label : termId;
+    showToast(`⚠️ 終點不正確（您點到了「${clickedName}」），請點擊另一個閃爍金色光圈的端點！`);
+  }
+}
+
+svgEl.addEventListener('click', () => {
+  if (selectedStartTerm) {
+    selectedStartTerm = null;
+    renderBoard();
+  }
+});
+
+// ============================================================================
+// 9. 自由模式管理與 16 狀態自動診斷引擎
+// ============================================================================
+function setSimulatorMode(mode) {
+  simulatorMode = mode;
+  selectedStartTerm = null;
+  tempTestActive = false;
+
+  const btnGuided = document.getElementById('btn-mode-guided');
+  const btnFree = document.getElementById('btn-mode-free');
+  const stageSelect = document.getElementById('stage-select');
+  const hudHint = document.getElementById('hud-mode-hint');
+  const diagBox = document.getElementById('diag-result-box');
+
+  if (mode === 'free') {
+    btnGuided.className = 'mode-btn';
+    btnFree.className = 'mode-btn active-free';
+    stageSelect.disabled = true;
+    hudHint.className = 'hud-pill free-mode-pill';
+    hudHint.innerHTML = `
+      🛠️ <b>自由接線模式</b><br>
+      1. 點擊<b>任意兩個端點</b>即可自由拉線。<br>
+      2. <b>直接點擊已接好的導線</b>即可將該線拆除。<br>
+      3. 右側可執行「🔍 自動診斷目前電路」！
+    `;
+    showToast(`🛠️ 已切換至「自由模式」！您可以任意接線或點擊導線拆除，探索不同接法的結果。`);
+  } else {
+    btnGuided.className = 'mode-btn active-guided';
+    btnFree.className = 'mode-btn';
+    stageSelect.disabled = false;
+    diagBox.style.display = 'none';
+    hudHint.className = 'hud-pill';
+    hudHint.innerHTML = `
+      💡 <b>引導接線模式</b><br>
+      1. 依序點擊畫布上閃爍的兩個端點完成拉線，或按右側「⚡ 自動接上此線」。<br>
+      2. 隨時可點擊 <b>A0、B0、A1、B1</b> 測試燈號！
+    `;
+    showToast(`🧭 已切換回「引導模式」！`);
+  }
+  renderBoard();
+}
+
+function removeWireInFreeMode(type, wireId, event) {
+  if (event) event.stopPropagation();
+  if (simulatorMode !== 'free') return;
+
+  if (type === 'std') {
+    connectedWires.delete(wireId);
+  } else {
+    customWires = customWires.filter(cw => cw.id !== wireId);
+  }
+  showToast(`🗑️ 已拆除該條導線！`);
+  renderBoard();
+}
+
+function undoLastFreeWire() {
+  while (wireHistory.length > 0) {
+    const last = wireHistory.pop();
+    if (last.type === 'std' && connectedWires.has(last.id)) {
+      connectedWires.delete(last.id);
+      showToast(`↩️ 已撤銷上一條接線！`);
+      renderBoard();
+      return;
+    } else if (last.type === 'custom' && customWires.some(cw => cw.id === last.id)) {
+      customWires = customWires.filter(cw => cw.id !== last.id);
+      showToast(`↩️ 已撤銷上一條自創接線！`);
+      renderBoard();
+      return;
+    }
+  }
+  showToast(`💡 目前沒有可撤銷的自由接線紀錄。`);
+}
+
+function clearAllFreeWires() {
+  connectedWires.clear();
+  customWires = [];
+  wireHistory = [];
+  selectedStartTerm = null;
+  document.getElementById('diag-result-box').style.display = 'none';
+  showToast(`🧹 已清空畫布上所有導線！您可以從零開始自由設計接線。`);
+  renderBoard();
+}
+
+function runFullDiagnostic() {
+  const diagBox = document.getElementById('diag-result-box');
+  diagBox.style.display = 'block';
+
+  let passCount = 0;
+  let errors = [];
+
+  for (let a1 = 0; a1 <= 1; a1++) {
+    for (let a0 = 0; a0 <= 1; a0++) {
+      for (let b1 = 0; b1 <= 1; b1++) {
+        for (let b0 = 0; b0 <= 1; b0++) {
+          const testSw = { A0: Boolean(a0), A1: Boolean(a1), B0: Boolean(b0), B1: Boolean(b1) };
+          const res = solveCircuitContinuity(testSw);
+          const expectedSum = (a1 * 2 + a0) + (b1 * 2 + b0);
+          const actualSum = (res.ledJia ? 4 : 0) + (res.ledYi ? 2 : 0) + (res.ledBing ? 1 : 0);
+
+          if (res.isShortCircuit) {
+            errors.push(`⚠️ 當 A=${a1 * 2 + a0}, B=${b1 * 2 + b0} 時：發生<b>正負極短路</b>！`);
+          } else if (actualSum === expectedSum) {
+            passCount++;
+          } else {
+            errors.push(`❌ 算式 <b>${a1 * 2 + a0} + ${b1 * 2 + b0} = ${expectedSum}</b>：實際亮燈值為 <b>${actualSum}</b> (甲:${res.ledJia?1:0} 乙:${res.ledYi?1:0} 丙:${res.ledBing?1:0})`);
+          }
+        }
+      }
+    }
+  }
+
+  if (passCount === 16) {
+    diagBox.innerHTML = `<span style="color:#34d399;font-weight:bold;">🎉 太神了！16 種二進位加法組合 (0+0 ~ 3+3) 100% 通過測試，且無任何電流逆流或短路！</span>`;
+  } else {
+    diagBox.innerHTML = `
+      <div style="color:#fbbf24;font-weight:bold;margin-bottom:4px;">📊 診斷結果：通過 ${passCount} / 16 組測試</div>
+      <div style="color:#fca5a5;">${errors.slice(0, 6).join('<br>')}</div>
+      ${errors.length > 6 ? `<div style="color:#94a3b8;margin-top:3px;">...另有 ${errors.length - 6} 組算式結果不符</div>` : ''}
+    `;
+  }
+}
+
+// ============================================================================
+// 10. 步驟導覽與面板更新
+// ============================================================================
+function syncWiresUpToStep(stepIdx) {
+  connectedWires.clear();
+  customWires = [];
+  tempTestActive = false;
+  selectedStartTerm = null;
+
+  const targetStep = STEPS[stepIdx];
+  if (!targetStep) return;
+
+  const maxWireIdx = (targetStep.type === 'wire') ? targetStep.wireIndex - 1 : targetStep.wireIndex;
+  for (let i = 0; i <= maxWireIdx; i++) {
+    if (WIRES[i]) connectedWires.add(WIRES[i].id);
+  }
+}
+
+function jumpToStep(stepIdx) {
+  if (simulatorMode === 'free') setSimulatorMode('guided');
+  currentStepIdx = Math.max(0, Math.min(STEPS.length - 1, stepIdx));
+  syncWiresUpToStep(currentStepIdx);
+  renderBoard();
+}
+
+function prevStep() {
+  if (currentStepIdx > 0) {
+    jumpToStep(currentStepIdx - 1);
+  }
+}
+
+function nextStep() {
+  const stepObj = STEPS[currentStepIdx];
+  if (stepObj && stepObj.type === 'wire') {
+    connectedWires.add(WIRES[stepObj.wireIndex].id);
+  }
+  if (currentStepIdx < STEPS.length - 1) {
+    currentStepIdx++;
+    tempTestActive = false;
+    selectedStartTerm = null;
+  }
+  renderBoard();
+}
+
+function autoWireCurrentOrNext() {
+  const stepObj = STEPS[currentStepIdx];
+  if (stepObj && stepObj.type === 'wire') {
+    const w = WIRES[stepObj.wireIndex];
+    if (!connectedWires.has(w.id)) {
+      connectedWires.add(w.id);
+      selectedStartTerm = null;
+      showToast(`⚡ 已自動接上：${TERMINALS[w.from].label} ➔ ${TERMINALS[w.to].label}`);
+      if (currentStepIdx < STEPS.length - 1) {
+        currentStepIdx++;
+      }
+      renderBoard();
+      return;
+    }
+  }
+  nextStep();
+}
+
+function completeAllWires() {
+  WIRES.forEach(w => connectedWires.add(w.id));
+  customWires = [];
+  currentStepIdx = STEPS.length - 1;
+  tempTestActive = false;
+  selectedStartTerm = null;
+  showToast(`🔌 已一鍵完成全部 28 條標準接線！請自由按壓開關組或點擊下方真值表測試！`);
+  renderBoard();
+}
+
+function resetAllWires() {
+  connectedWires.clear();
+  customWires = [];
+  wireHistory = [];
+  currentStepIdx = 0;
+  tempTestActive = false;
+  selectedStartTerm = null;
+  document.getElementById('diag-result-box').style.display = 'none';
+  releaseAllSwitches();
+  showToast(`🔄 已重置回步驟 1 初始開關佈局！`);
+  renderBoard();
+}
+
+function toggleTempTestWire() {
+  tempTestActive = !tempTestActive;
+  renderBoard();
+}
+
+function toggleCurrentFlowVis() {
+  showCurrentFlow = !showCurrentFlow;
+  document.getElementById('btn-flow-vis').textContent = showCurrentFlow ? '⚡ 電流高亮：開啟' : '⚡ 電流高亮：關閉';
+  renderBoard();
+}
+
+function toggleSwitchGroup(groupId) {
+  switchGroups[groupId] = !switchGroups[groupId];
+  renderBoard();
+}
+
+function releaseAllSwitches() {
+  switchGroups.A0 = false;
+  switchGroups.B0 = false;
+  switchGroups.A1 = false;
+  switchGroups.B1 = false;
+  renderBoard();
+}
+
+function setSwitchesFromRow(a0, a1, b0, b1) {
+  switchGroups.A0 = Boolean(a0);
+  switchGroups.A1 = Boolean(a1);
+  switchGroups.B0 = Boolean(b0);
+  switchGroups.B1 = Boolean(b1);
+  renderBoard();
+}
+
+function updateSidePanelAndReadout(sim) {
+  const stepBadge = document.getElementById('step-mode-badge');
+  const stepCounter = document.getElementById('step-counter-text');
+  const stepTitle = document.getElementById('step-title-text');
+  const stepDesc = document.getElementById('step-desc-text');
+  const epUi = document.getElementById('task-endpoints-ui');
+  const instrText = document.getElementById('task-instruction-text');
+  const methodBadge = document.getElementById('task-method-badge');
+  const guidedNav = document.getElementById('guided-nav-row');
+  const freeTools = document.getElementById('free-tools-box');
+  const tempBox = document.getElementById('temp-test-box');
+
+  if (simulatorMode === 'free') {
+    stepBadge.textContent = '🛠️ 自由模式';
+    stepBadge.className = 'step-badge free-badge';
+    const totalWiresNow = connectedWires.size + customWires.length;
+    stepCounter.textContent = `目前畫布接線數：${totalWiresNow} 條`;
+    stepTitle.textContent = '自由探索與實驗接線模式';
+    instrText.innerHTML = selectedStartTerm
+      ? `🎯 已選擇起點：<b>${TERMINALS[selectedStartTerm].label}</b><br>請點擊畫布上任意第二個端點完成連接（或點空白處取消）。`
+      : `請直接點擊畫布上的<b>任意兩個端點</b>進行接線；若想拆掉某條線，<b>直接用滑鼠點擊該條導線</b>即可刪除！`;
+    epUi.style.display = 'none';
+    methodBadge.innerHTML = '';
+    stepDesc.innerText = '在自由模式下，底層電路引擎會即時模擬您的任何接法（包含電流逆流、並聯搶電或正負極短路）。接完後可點擊下方「🔍 自動診斷目前電路」驗證是否符合全加器邏輯！';
+    guidedNav.style.display = 'none';
+    freeTools.classList.add('active-free-tools');
+    tempBox.classList.remove('active-box');
+  } else {
+    const stepObj = STEPS[currentStepIdx];
+    const displayStepNum = currentStepIdx + 1;
+    stepBadge.textContent = `步驟 ${displayStepNum}`;
+    stepBadge.className = 'step-badge';
+    stepCounter.textContent = `進度 ${displayStepNum} / ${STEPS.length}`;
+    stepTitle.textContent = stepObj.title;
+    stepDesc.innerText = stepObj.desc;
+    document.getElementById('stage-select').value = currentStepIdx;
+
+    guidedNav.style.display = 'grid';
+    freeTools.classList.remove('active-free-tools');
+    const actionBtn = document.getElementById('btn-action-next');
+
+    if (stepObj.type === 'wire') {
+      const w = WIRES[stepObj.wireIndex];
+      const isDone = connectedWires.has(w.id);
+      instrText.innerHTML = isDone
+        ? `✅ <b>本步線路已連接完成！</b>`
+        : `請在左側畫布依序點擊以下兩個閃爍端點完成接線：`;
+      epUi.style.display = 'flex';
+
+      const fromChip = document.getElementById('ep-from-chip');
+      const toChip = document.getElementById('ep-to-chip');
+      fromChip.textContent = TERMINALS[w.from].label;
+      toChip.textContent = TERMINALS[w.to].label;
+      fromChip.className = 'ep-chip' + (selectedStartTerm === w.from ? ' selected' : '');
+      toChip.className = 'ep-chip' + (selectedStartTerm === w.to ? ' selected' : '');
+
+      let badgeCls = 'method-pin';
+      if (w.method === 'twist') badgeCls = 'method-twist';
+      else if (w.method === 'strip') badgeCls = 'method-strip';
+      methodBadge.innerHTML = `<span class="method-badge ${badgeCls}">${w.methodLabel}</span>`;
+
+      actionBtn.textContent = isDone ? '下一步 ➔' : '⚡ 自動接上此線';
+    } else {
+      instrText.innerText = stepObj.instruction;
+      epUi.style.display = 'none';
+      methodBadge.innerHTML = '';
+      actionBtn.textContent = (currentStepIdx === STEPS.length - 1) ? '已完成全部步驟' : '繼續下一步 ➔';
+    }
+
+    // 檢查點臨時測試按鈕顯示控制
+    const tempBtn = document.getElementById('btn-temp-test');
+    if (stepObj.tempMode) {
+      tempBox.classList.add('active-box');
+      tempBtn.className = 'btn-temp-toggle' + (tempTestActive ? ' engaged' : '');
+      if (stepObj.tempMode === 'TEST_YI1') {
+        tempBtn.textContent = tempTestActive
+          ? '🔌 正在臨時接觸乙燈長腳 (點擊拔開恢復)'
+          : '🔌 點擊臨時將「乙1」接觸乙燈長腳進行測試';
+      } else if (stepObj.tempMode === 'TEST_YI2_ONLY') {
+        tempBtn.textContent = tempTestActive
+          ? '🔍 目前已暫時拔除乙1，單獨測試乙2 (點擊恢復兩路並聯)'
+          : '🔍 點擊暫時拔除「乙1」，單獨驗證乙2 (XNOR)';
+      } else if (stepObj.tempMode === 'TEST_JIA2') {
+        tempBtn.textContent = tempTestActive
+          ? '🔌 正在臨時接觸甲燈長腳 (點擊拔開恢復)'
+          : '🔌 點擊臨時將「甲2」接觸甲燈長腳進行測試 (測 2+2)';
+      }
+    } else {
+      tempBox.classList.remove('active-box');
+    }
+  }
+
+  // 更新右側四顆開關按鈕外觀與算式讀數
+  ['B1', 'B0', 'A1', 'A0'].forEach(gid => {
+    const btn = document.getElementById(`sw-btn-${gid}`);
+    const pressed = switchGroups[gid];
+    btn.className = 'sw-btn' + (pressed ? ' pressed' : '');
+    const subSpan = btn.querySelector('span.sub');
+    const swNames = Object.values(CLUSTERS[gid].sw).filter(Boolean).join(', ');
+    subSpan.textContent = `${swNames} | 狀態: ${pressed ? '1 (按下)' : '0 (放開)'}`;
+  });
+
+  const valA = (switchGroups.A1 ? 2 : 0) + (switchGroups.A0 ? 1 : 0);
+  const valB = (switchGroups.B1 ? 2 : 0) + (switchGroups.B0 ? 1 : 0);
+  const binA = `${switchGroups.A1 ? 1 : 0}${switchGroups.A0 ? 1 : 0}`;
+  const binB = `${switchGroups.B1 ? 1 : 0}${switchGroups.B0 ? 1 : 0}`;
+
+  const outVal = (sim.ledJia ? 4 : 0) + (sim.ledYi ? 2 : 0) + (sim.ledBing ? 1 : 0);
+  const outBin = `${sim.ledJia ? 1 : 0}${sim.ledYi ? 1 : 0}${sim.ledBing ? 1 : 0}`;
+
+  document.getElementById('math-input-str').textContent = `輸入：A (${binA}₂ = ${valA}) + B (${binB}₂ = ${valB})`;
+  document.getElementById('math-output-str').textContent = sim.isShortCircuit
+    ? `⚠️ 正負極短路！`
+    : `亮燈：${outBin}₂ (十進位 ${outVal})`;
+
+  // 高亮真值表對應列
+  const rows = document.querySelectorAll('#truth-table-body tr');
+  rows.forEach((tr, idx) => {
+    const d = TRUTH_TABLE_DATA[idx];
+    const match = (Boolean(d.A0) === switchGroups.A0) &&
+                  (Boolean(d.A1) === switchGroups.A1) &&
+                  (Boolean(d.B0) === switchGroups.B0) &&
+                  (Boolean(d.B1) === switchGroups.B1);
+    tr.className = match ? 'current-row' : '';
+  });
+}
+
+let toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('toast-msg');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+// ============================================================================
+// 11. 初始化下拉選單與真值表
+// ============================================================================
+function initUI() {
+  const sel = document.getElementById('stage-select');
+  STEPS.forEach((s, idx) => {
+    const opt = document.createElement('option');
+    opt.value = idx;
+    opt.textContent = `步驟 ${idx + 1}. ${s.title}`;
+    sel.appendChild(opt);
+  });
+
+  const tbody = document.getElementById('truth-table-body');
+  TRUTH_TABLE_DATA.forEach(row => {
+    const tr = document.createElement('tr');
+    tr.onclick = () => setSwitchesFromRow(row.A0, row.A1, row.B0, row.B1);
+    tr.innerHTML = `
+      <td>${row.A0}</td>
+      <td>${row.A1}</td>
+      <td>${row.B0}</td>
+      <td>${row.B1}</td>
+      <td style="font-weight:bold;color:#38bdf8;">${row.expr}</td>
+      <td style="color:${row.jia ? '#fde047' : '#64748b'};font-weight:bold;">${row.jia ? '● 亮' : '✕'}</td>
+      <td style="color:${row.yi ? '#fde047' : '#64748b'};font-weight:bold;">${row.yi ? '● 亮' : '✕'}</td>
+      <td style="color:${row.bing ? '#fde047' : '#64748b'};font-weight:bold;">${row.bing ? '● 亮' : '✕'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  renderBoard();
+}
+
+initUI();
+</script>
+</body>
+</html>
