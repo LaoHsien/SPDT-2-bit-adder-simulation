@@ -430,17 +430,28 @@
   }
   .sw-btn.pressed span.sub { color: #dbeafe; }
 
+  /* 修正後：上下兩行獨立顯示輸入與亮燈結果，絕不斷行 */
   .math-readout {
     background: #1e293b;
     border-radius: 8px;
-    padding: 9px 12px;
-    font-size: 13px;
+    padding: 10px 14px;
+    font-size: 13.5px;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    gap: 6px;
     border: 1px solid #334155;
   }
-  .math-readout strong { color: #fbbf24; font-size: 15px; }
+  .math-readout-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    white-space: nowrap;
+  }
+  .math-readout strong {
+    color: #fbbf24;
+    font-size: 15px;
+    white-space: nowrap;
+  }
 
   /* 真值表快速測試區 */
   .truth-table-wrap {
@@ -665,8 +676,12 @@
         </button>
       </div>
       <div class="math-readout">
-        <span id="math-input-str">輸入：A (00₂ = 0) + B (00₂ = 0)</span>
-        <strong id="math-output-str">亮燈：000₂ (0)</strong>
+        <div class="math-readout-row">
+          <span id="math-input-str">輸入：A (00₂ = 0) + B (00₂ = 0)</span>
+        </div>
+        <div class="math-readout-row">
+          <strong id="math-output-str">亮燈：000₂ (十進位 0)</strong>
+        </div>
       </div>
     </div>
 
@@ -1365,7 +1380,11 @@ function renderBoard() {
           html += `<path d="${pointsToOrthoPath(branchA)}" fill="none" stroke="#fef08a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="wire-live-flow" filter="url(#wire-glow)"/>`;
           html += `<path d="${pointsToOrthoPath(branchB)}" fill="none" stroke="#fef08a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="wire-live-flow" filter="url(#wire-glow)"/>`;
         } else {
-          const flowPts = w.flowReverse ? [...w.path].reverse() : w.path;
+          // 動態依據兩端點與電源的拓撲距離 (nodeDist) 判斷電流實際流向
+          const dFrom = nodeDist[w.from] ?? 999;
+          const dTo = nodeDist[w.to] ?? 999;
+          const shouldReverse = (dTo < dFrom) || (dTo === dFrom && w.flowReverse);
+          const flowPts = shouldReverse ? [...w.path].reverse() : w.path;
           const flowD = pointsToOrthoPath(flowPts);
           html += `<path d="${flowD}" fill="none" stroke="#fef08a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="wire-live-flow" filter="url(#wire-glow)"/>`;
         }
@@ -1432,7 +1451,7 @@ function renderBoard() {
     }
   }
 
-  // --- D. 固定保留預覽虛線元素 #preview-wire (滑鼠移動時僅更新 d 屬性，不重繪整張畫布) ---
+  // --- D. 固定保留預覽虛線元素 #preview-wire ---
   let previewD = '';
   if (selectedStartTerm && TERMINALS[selectedStartTerm]) {
     const st = TERMINALS[selectedStartTerm];
@@ -1502,7 +1521,12 @@ function renderBoard() {
         const intNode = `SW_INT_${t.swName}`;
         const dTerm = nodeDist[t.id] ?? 999;
         const dInt = nodeDist[intNode] ?? 999;
-        const flowsIntoSwitch = (dTerm <= dInt);
+        // 檢查該腳位目前是否與開關內部彈片導通 (若未導通，代表電從外部導線流入該腳位停住)
+        const isConnectedInsideSwitch =
+          (t.role === 'COM') ||
+          (t.role === 'NO' && isPressed) ||
+          (t.role === 'NC' && !isPressed);
+        const flowsIntoSwitch = !isConnectedInsideSwitch ? true : (dTerm <= dInt);
         const sx = flowsIntoSwitch ? t.x : t.pinX;
         const sy = flowsIntoSwitch ? t.y : t.pinY;
         const ex = flowsIntoSwitch ? t.pinX : t.x;
@@ -1623,7 +1647,6 @@ function renderBoard() {
     html += `
       <g class="terminal-group" onpointerdown="handleTerminalClick('${t.id}', event)">
         <title>${t.label}</title>
-        <!-- 隱形大範圍感應區 (半徑 15px)，確保任何滑鼠或觸控板都能輕鬆點中 -->
         <circle cx="${t.x}" cy="${t.y}" r="15" fill="transparent"/>
         <circle class="terminal-dot" cx="${t.x}" cy="${t.y}" r="${isTarget || simulatorMode === 'free' ? 7.5 : 5.5}"
           fill="${isPowered ? '#fde047' : cHex}"
@@ -1637,7 +1660,7 @@ function renderBoard() {
 }
 
 // ============================================================================
-// 8. 端點點擊互動邏輯 (修正滑鼠移動重繪導致點擊失效之問題)
+// 8. 端點點擊互動邏輯
 // ============================================================================
 svgEl.addEventListener('pointermove', (e) => {
   if (!selectedStartTerm || !TERMINALS[selectedStartTerm]) return;
@@ -1649,7 +1672,6 @@ svgEl.addEventListener('pointermove', (e) => {
   const cursorPt = pt.matrixTransform(ctm.inverse());
   mouseSvgPt = { x: Math.round(cursorPt.x), y: Math.round(cursorPt.y) };
 
-  // 只單獨更新 #preview-wire 的路徑屬性，絕對不重建 SVG DOM，讓第二下點擊 100% 穩定觸發
   const previewEl = document.getElementById('preview-wire');
   if (previewEl) {
     const st = TERMINALS[selectedStartTerm];
