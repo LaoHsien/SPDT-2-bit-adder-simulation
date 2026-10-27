@@ -1634,7 +1634,7 @@ function renderBoard() {
         fill="${isPowered ? '#fde047' : cHex}"
         stroke="#0f172a" stroke-width="2"
         class="terminal-hit"
-        onclick="handleTerminalClick('${t.id}', event)">
+        onpointerdown="handleTerminalClick('${t.id}', event)">
         <title>${t.label}</title>
       </circle>
     `;
@@ -1648,17 +1648,28 @@ function renderBoard() {
 // 8. 端點點擊互動邏輯 (同時支援「引導模式」與「自由模式」)
 // ============================================================================
 svgEl.addEventListener('mousemove', (e) => {
-  if (!selectedStartTerm) return;
+  if (!selectedStartTerm || !TERMINALS[selectedStartTerm]) return;
   const pt = svgEl.createSVGPoint();
   pt.x = e.clientX;
   pt.y = e.clientY;
   const cursorPt = pt.matrixTransform(svgEl.getScreenCTM().inverse());
   mouseSvgPt = { x: Math.round(cursorPt.x), y: Math.round(cursorPt.y) };
-  renderBoard();
-});
 
+  // 只單獨更新預覽虛線的 d 屬性，不重繪整個 SVG DOM，徹底解決點擊失效問題
+  const previewEl = document.getElementById('preview-wire');
+  if (previewEl) {
+    const st = TERMINALS[selectedStartTerm];
+    const midX = Math.round((st.x + mouseSvgPt.x) / 2);
+    previewEl.setAttribute('d', `M ${st.x} ${st.y} L ${midX} ${st.y} L ${midX} ${mouseSvgPt.y} L ${mouseSvgPt.x} ${mouseSvgPt.y}`);
+  }
+});
 function handleTerminalClick(termId, event) {
-  if (event) event.stopPropagation();
+  svgEl.addEventListener('pointerdown', () => {
+  if (selectedStartTerm) {
+    selectedStartTerm = null;
+    renderBoard();
+  }
+});
 
   // ---------------- 【自由模式】任意端點配對接線 ----------------
   if (simulatorMode === 'free') {
