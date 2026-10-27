@@ -1438,12 +1438,14 @@ function renderBoard() {
     }
   }
 
-  // --- D. 若正在拖曳配對接線，畫出滑鼠即時直角預覽線 ---
+ // --- D. 若正在拖曳配對接線，畫出滑鼠即時直角預覽線 ---
+  let previewD = '';
   if (selectedStartTerm && TERMINALS[selectedStartTerm]) {
     const st = TERMINALS[selectedStartTerm];
     const midX = Math.round((st.x + mouseSvgPt.x) / 2);
-    const previewD = `M ${st.x} ${st.y} L ${midX} ${st.y} L ${midX} ${mouseSvgPt.y} L ${mouseSvgPt.x} ${mouseSvgPt.y}`;
-    html += `<path d="${previewD}" fill="none" stroke="#0284c7" stroke-width="4" stroke-dasharray="7 5" pointer-events="none"/>`;
+    previewD = `M ${st.x} ${st.y} L ${midX} ${st.y} L ${midX} ${mouseSvgPt.y} L ${mouseSvgPt.x} ${mouseSvgPt.y}`;
+  }
+  html += `<path id="preview-wire" d="${previewD}" fill="none" stroke="#0284c7" stroke-width="4" stroke-dasharray="7 5" pointer-events="none"/>`;
   }
 
   // --- E. 繪製中央壓接端子 (標註黑軌 - 與紅軌 +) ---
