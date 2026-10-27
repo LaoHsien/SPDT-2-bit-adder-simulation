@@ -169,6 +169,7 @@
     border-radius: 10px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     border: 3px solid #475569;
+    touch-action: none;
   }
 
   /* 浮動提示框 (固定於畫布右上角空白處) */
@@ -475,14 +476,13 @@
   }
 
   /* SVG 內部互動樣式 */
-  .terminal-hit {
+  .terminal-group {
     cursor: pointer;
-    transition: r 0.15s ease;
   }
-  .terminal-hit:hover {
+  .terminal-group:hover .terminal-dot {
     stroke: #0284c7;
-    stroke-width: 3px;
-    r: 8px;
+    stroke-width: 3.5px;
+    r: 8.5px;
   }
 
   .wire-deletable {
@@ -779,8 +779,6 @@ initTerminals();
 
 // ============================================================================
 // 2. 完整接線定義與直角路徑座標
-//    - flowReverse: true 代表電流實際方向為由 to 端流向 from 端
-//    - 上方 LED 走線已全面改由下方通道 (y=124..172) 垂直向上接入長腳 (y=112)，完全不遮擋燈泡
 // ============================================================================
 const WIRES = [
   // --- 階段 1: 從 A0 開始 (個位數 XOR，控制丙燈) ---
@@ -1143,7 +1141,6 @@ function solveCircuitContinuity(overrideSwitches = null) {
     if (!connectedWires.has(w.id)) return;
     if (isIsolateYi1 && w.id === 'W12') return;
 
-    // 在無自創線時，對匯流至乙燈/甲燈的並聯輸出端採單向匯流，避免「乙1」逆向點亮沒電的「乙2」(或 2+2 逆向點亮 f1/f2)
     if (!hasCustom && (w.id === 'W23' || w.id === 'W26' || w.id === 'W27')) {
       addDirEdge(w.from, w.to);
     } else if (!hasCustom && w.id === 'W16') {
@@ -1319,14 +1316,13 @@ function renderBoard() {
     const d = pointsToOrthoPath(w.path);
     const colHex = WIRE_COLORS[w.color].hex;
     const wireOpacity = (isIsolateYi1 && w.id === 'W12') ? 0.25 : 1;
-    const clickAttr = (simulatorMode === 'free') ? `class="wire-deletable" onclick="removeWireInFreeMode('std', '${w.id}', event)"` : '';
+    const clickAttr = (simulatorMode === 'free') ? `class="wire-deletable" onpointerdown="removeWireInFreeMode('std', '${w.id}', event)"` : '';
 
     html += `<g opacity="${wireOpacity}" ${clickAttr}>`;
     if (simulatorMode === 'free') {
       html += `<title>點擊刪除此條導線 (${TERMINALS[w.from].label} ↔ ${TERMINALS[w.to].label})</title>`;
     }
 
-    // 特殊處理 W16：包含綠色「乙2」段與紅色「乙1延伸至扭線」段
     if (w.id === 'W16') {
       const dYi1Branch = pointsToOrthoPath(w.yi1BranchPath);
       html += `<path d="${dYi1Branch}" fill="none" stroke="#0f172a" stroke-width="${isLatestStepWire ? 9 : 7.5}" stroke-linecap="round" stroke-linejoin="round"/>`;
@@ -1356,11 +1352,9 @@ function renderBoard() {
         html += `<path d="${d}" fill="none" stroke="${colHex}" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>`;
       }
 
-      // 繪製正確物理流向的電流高亮動畫
       const isPowered = showCurrentFlow && (poweredNodes.has(w.from) && poweredNodes.has(w.to));
       if (isPowered) {
         if (w.id === 'W7') {
-          // W7 為 a2.NC 與 b2.NC 匯流至 NODE_NO_CARRY [1245,515]
           const a2Feeding = !switchGroups.A0;
           const branchA = a2Feeding
             ? [[1085,732], [1245,732], [1245,515]]
@@ -1403,12 +1397,12 @@ function renderBoard() {
     html += `</g>`;
   });
 
-  // --- B2. 繪製自由模式下學生的自創導線 (自動依 BFS 距離決定電流動畫流向) ---
+  // --- B2. 繪製自由模式下學生的自創導線 ---
   customWires.forEach(cw => {
     const isPowered = showCurrentFlow && (poweredNodes.has(cw.from) && poweredNodes.has(cw.to));
     const d = pointsToOrthoPath(cw.path);
     const colHex = WIRE_COLORS[cw.color] ? WIRE_COLORS[cw.color].hex : '#38bdf8';
-    const clickAttr = (simulatorMode === 'free') ? `class="wire-deletable" onclick="removeWireInFreeMode('custom', '${cw.id}', event)"` : '';
+    const clickAttr = (simulatorMode === 'free') ? `class="wire-deletable" onpointerdown="removeWireInFreeMode('custom', '${cw.id}', event)"` : '';
 
     html += `<g ${clickAttr}>`;
     html += `<title>自創接線：${TERMINALS[cw.from].label} ↔ ${TERMINALS[cw.to].label} (點擊可刪除)</title>`;
@@ -1423,7 +1417,7 @@ function renderBoard() {
     html += `</g>`;
   });
 
-  // --- C. 繪製檢查點臨時測試虛線 (由下方通道向上接至 LED 長腳) ---
+  // --- C. 繪製檢查點臨時測試虛線 ---
   if (simulatorMode === 'guided' && tempTestActive && stepObj) {
     if (stepObj.tempMode === 'TEST_YI1') {
       const tempD = pointsToOrthoPath([[115,195], [115,148], [675,148], [675,112]]);
@@ -1438,7 +1432,7 @@ function renderBoard() {
     }
   }
 
- // --- D. 若正在拖曳配對接線，畫出滑鼠即時直角預覽線 ---
+  // --- D. 固定保留預覽虛線元素 #preview-wire (滑鼠移動時僅更新 d 屬性，不重繪整張畫布) ---
   let previewD = '';
   if (selectedStartTerm && TERMINALS[selectedStartTerm]) {
     const st = TERMINALS[selectedStartTerm];
@@ -1446,7 +1440,6 @@ function renderBoard() {
     previewD = `M ${st.x} ${st.y} L ${midX} ${st.y} L ${midX} ${mouseSvgPt.y} L ${mouseSvgPt.x} ${mouseSvgPt.y}`;
   }
   html += `<path id="preview-wire" d="${previewD}" fill="none" stroke="#0284c7" stroke-width="4" stroke-dasharray="7 5" pointer-events="none"/>`;
-  }
 
   // --- E. 繪製中央壓接端子 (標註黑軌 - 與紅軌 +) ---
   html += `
@@ -1494,7 +1487,6 @@ function renderBoard() {
     const { cx, cy, sw, id, label } = cl;
     const isPressed = switchGroups[id];
 
-    // 1. 畫每個開關腳位延伸出的灰針腳與彩色固定杜邦短引線 (含正確進出方向的電流動畫)
     const pinTerms = Object.values(TERMINALS).filter(t => t.group === id);
     pinTerms.forEach(t => {
       const cHex = WIRE_COLORS[t.color].hex;
@@ -1510,7 +1502,6 @@ function renderBoard() {
         const intNode = `SW_INT_${t.swName}`;
         const dTerm = nodeDist[t.id] ?? 999;
         const dInt = nodeDist[intNode] ?? 999;
-        // 若外部端點距離電源較近 (或開關內部未導通)，電流由外部端點 (t.x, t.y) 流入開關腳位 (t.pinX, t.pinY)
         const flowsIntoSwitch = (dTerm <= dInt);
         const sx = flowsIntoSwitch ? t.x : t.pinX;
         const sy = flowsIntoSwitch ? t.y : t.pinY;
@@ -1526,8 +1517,8 @@ function renderBoard() {
       html += `<line x1="${cx + 36}" y1="${cy - 26}" x2="${cx + 36}" y2="${cy - 75}" stroke="#94a3b8" stroke-width="5"/>`;
     }
 
-    // 2. 微動開關外殼與中心黑色連動按壓塊
-    html += `<g class="switch-cluster-btn" onclick="toggleSwitchGroup('${id}')">`;
+    // 微動開關外殼與中心黑色連動按壓塊
+    html += `<g class="switch-cluster-btn" onpointerdown="toggleSwitchGroup('${id}', event)">`;
     html += `<rect x="${cx - 26}" y="${cy - 26}" width="52" height="52" fill="${isPressed ? '#2563eb' : '#0f172a'}"/>`;
 
     // 上直立開關 (a1, b1, c1, d1)
@@ -1608,7 +1599,7 @@ function renderBoard() {
     `;
   });
 
-  // --- I. 繪製所有可點擊端點圓點與當前目標金色呼吸光圈 ---
+  // --- I. 繪製所有可點擊端點圓點、15px 隱形感應擴大區與目標金色呼吸光圈 ---
   Object.values(TERMINALS).forEach(t => {
     if (t.isTag) {
       const usedInCustom = customWires.some(cw => cw.from === t.id || cw.to === t.id);
@@ -1630,13 +1621,14 @@ function renderBoard() {
     }
 
     html += `
-      <circle cx="${t.x}" cy="${t.y}" r="${isTarget || simulatorMode === 'free' ? 7 : 5.5}"
-        fill="${isPowered ? '#fde047' : cHex}"
-        stroke="#0f172a" stroke-width="2"
-        class="terminal-hit"
-        onpointerdown="handleTerminalClick('${t.id}', event)">
+      <g class="terminal-group" onpointerdown="handleTerminalClick('${t.id}', event)">
         <title>${t.label}</title>
-      </circle>
+        <!-- 隱形大範圍感應區 (半徑 15px)，確保任何滑鼠或觸控板都能輕鬆點中 -->
+        <circle cx="${t.x}" cy="${t.y}" r="15" fill="transparent"/>
+        <circle class="terminal-dot" cx="${t.x}" cy="${t.y}" r="${isTarget || simulatorMode === 'free' ? 7.5 : 5.5}"
+          fill="${isPowered ? '#fde047' : cHex}"
+          stroke="#0f172a" stroke-width="2"/>
+      </g>
     `;
   });
 
@@ -1645,17 +1637,19 @@ function renderBoard() {
 }
 
 // ============================================================================
-// 8. 端點點擊互動邏輯 (同時支援「引導模式」與「自由模式」)
+// 8. 端點點擊互動邏輯 (修正滑鼠移動重繪導致點擊失效之問題)
 // ============================================================================
-svgEl.addEventListener('mousemove', (e) => {
+svgEl.addEventListener('pointermove', (e) => {
   if (!selectedStartTerm || !TERMINALS[selectedStartTerm]) return;
   const pt = svgEl.createSVGPoint();
   pt.x = e.clientX;
   pt.y = e.clientY;
-  const cursorPt = pt.matrixTransform(svgEl.getScreenCTM().inverse());
+  const ctm = svgEl.getScreenCTM();
+  if (!ctm) return;
+  const cursorPt = pt.matrixTransform(ctm.inverse());
   mouseSvgPt = { x: Math.round(cursorPt.x), y: Math.round(cursorPt.y) };
 
-  // 只單獨更新預覽虛線的 d 屬性，不重繪整個 SVG DOM，徹底解決點擊失效問題
+  // 只單獨更新 #preview-wire 的路徑屬性，絕對不重建 SVG DOM，讓第二下點擊 100% 穩定觸發
   const previewEl = document.getElementById('preview-wire');
   if (previewEl) {
     const st = TERMINALS[selectedStartTerm];
@@ -1663,13 +1657,12 @@ svgEl.addEventListener('mousemove', (e) => {
     previewEl.setAttribute('d', `M ${st.x} ${st.y} L ${midX} ${st.y} L ${midX} ${mouseSvgPt.y} L ${mouseSvgPt.x} ${mouseSvgPt.y}`);
   }
 });
+
 function handleTerminalClick(termId, event) {
-  svgEl.addEventListener('pointerdown', () => {
-  if (selectedStartTerm) {
-    selectedStartTerm = null;
-    renderBoard();
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
   }
-});
 
   // ---------------- 【自由模式】任意端點配對接線 ----------------
   if (simulatorMode === 'free') {
@@ -1779,7 +1772,8 @@ function handleTerminalClick(termId, event) {
   }
 }
 
-svgEl.addEventListener('click', () => {
+// 點擊畫布空白處取消當前起點選取
+svgEl.addEventListener('pointerdown', () => {
   if (selectedStartTerm) {
     selectedStartTerm = null;
     renderBoard();
@@ -1829,7 +1823,10 @@ function setSimulatorMode(mode) {
 }
 
 function removeWireInFreeMode(type, wireId, event) {
-  if (event) event.stopPropagation();
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
   if (simulatorMode !== 'free') return;
 
   if (type === 'std') {
@@ -2004,7 +2001,10 @@ function toggleCurrentFlowVis() {
   renderBoard();
 }
 
-function toggleSwitchGroup(groupId) {
+function toggleSwitchGroup(groupId, event) {
+  if (event) {
+    event.stopPropagation();
+  }
   switchGroups[groupId] = !switchGroups[groupId];
   renderBoard();
 }
