@@ -126,6 +126,52 @@
   }
   .btn-primary:hover { background: #b45309; }
 
+  /* 步驟 1 開始接線按鈕醒目閃光特效 */
+  @keyframes startBtnPulse {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7), 0 0 12px rgba(245, 158, 11, 0.6);
+      transform: scale(1);
+    }
+    50% {
+      box-shadow: 0 0 0 6px rgba(245, 158, 11, 0), 0 0 22px rgba(253, 224, 71, 0.95);
+      transform: scale(1.03);
+    }
+  }
+
+  @keyframes startBtnShimmer {
+    0% { left: -100%; }
+    55%, 100% { left: 140%; }
+  }
+
+  .btn-start-flash {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%) !important;
+    border: 2px solid #fde047 !important;
+    color: #ffffff !important;
+    font-size: 13.5px;
+    letter-spacing: 0.5px;
+    animation: startBtnPulse 1.6s infinite ease-in-out;
+  }
+
+  .btn-start-flash::after {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -100%;
+    width: 55%;
+    height: 200%;
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.65) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    transform: rotate(25deg);
+    animation: startBtnShimmer 2.2s infinite;
+    pointer-events: none;
+  }
+
   .btn-success {
     background: #059669;
     border-color: #10b981;
@@ -172,35 +218,83 @@
     touch-action: none;
   }
 
-  /* 浮動提示框 (固定於畫布右上角空白處) */
+  /* 浮動提示框 (固定於畫布右上角空白處，支援折疊收合) */
   .canvas-hud {
     position: absolute;
-    top: 18px;
-    right: 18px;
-    width: 235px;
+    top: 16px;
+    right: 16px;
+    width: 240px;
     display: flex;
     flex-direction: column;
+    align-items: flex-end;
     gap: 8px;
     pointer-events: none;
     z-index: 10;
   }
 
   .hud-pill {
+    width: 100%;
     background: rgba(15, 23, 42, 0.92);
     backdrop-filter: blur(4px);
     color: #f8fafc;
-    padding: 10px 12px;
+    padding: 9px 12px;
     border-radius: 8px;
     border: 1px solid #475569;
     font-size: 12.5px;
     line-height: 1.5;
     pointer-events: auto;
     box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+    transition: all 0.2s ease;
   }
 
   .hud-pill.free-mode-pill {
     border-color: #a855f7;
     background: rgba(30, 17, 54, 0.92);
+  }
+
+  .hud-pill.collapsed {
+    width: auto;
+    padding: 6px 10px;
+    background: rgba(15, 23, 42, 0.85);
+  }
+
+  .hud-pill.free-mode-pill.collapsed {
+    background: rgba(30, 17, 54, 0.85);
+  }
+
+  .hud-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    cursor: pointer;
+  }
+
+  .hud-toggle-btn {
+    font-size: 11px;
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .hud-pill.free-mode-pill .hud-toggle-btn {
+    color: #d8b4fe;
+    background: rgba(168, 85, 247, 0.2);
+    border-color: rgba(168, 85, 247, 0.45);
+  }
+
+  .hud-body {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(148, 163, 184, 0.25);
+  }
+
+  .hud-pill.collapsed .hud-body {
+    display: none;
   }
 
   .short-circuit-banner {
@@ -430,28 +524,17 @@
   }
   .sw-btn.pressed span.sub { color: #dbeafe; }
 
-  /* 修正後：上下兩行獨立顯示輸入與亮燈結果，絕不斷行 */
   .math-readout {
     background: #1e293b;
     border-radius: 8px;
-    padding: 10px 14px;
-    font-size: 13.5px;
+    padding: 9px 12px;
+    font-size: 13px;
     display: flex;
-    flex-direction: column;
-    gap: 6px;
+    justify-content: space-between;
+    align-items: center;
     border: 1px solid #334155;
   }
-  .math-readout-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    white-space: nowrap;
-  }
-  .math-readout strong {
-    color: #fbbf24;
-    font-size: 15px;
-    white-space: nowrap;
-  }
+  .math-readout strong { color: #fbbf24; font-size: 15px; }
 
   /* 真值表快速測試區 */
   .truth-table-wrap {
@@ -586,12 +669,17 @@
       ⚠️ 警告：發生電源正負極短路！紅軌 (+) 與黑軌 (-) 直接導通，請檢查接線！
     </div>
 
-    <!-- 右上角多行提示框 -->
+    <!-- 右上角多行提示框 (可點擊折疊收合) -->
     <div class="canvas-hud">
       <div class="hud-pill" id="hud-mode-hint">
-        💡 <b>引導接線模式</b><br>
-        1. 依序點擊畫布上閃爍的兩個端點完成拉線，或按右側「⚡ 自動接上此線」。<br>
-        2. 隨時可點擊 <b>A0、B0、A1、B1</b> 測試燈號！
+        <div class="hud-header" onclick="toggleHudHint()" title="點擊收起或展開提示框">
+          <span id="hud-mode-title">💡 <b>引導接線模式</b></span>
+          <span class="hud-toggle-btn" id="hud-toggle-btn">▲ 收起</span>
+        </div>
+        <div class="hud-body" id="hud-mode-body">
+          1. 依序點擊畫布上閃爍的兩個端點完成拉線，或按右側「⚡ 自動接上此線」。<br>
+          2. 隨時可點擊 <b>A0、B0、A1、B1</b> 測試燈號！
+        </div>
       </div>
     </div>
 
@@ -634,7 +722,7 @@
       <!-- 引導模式導覽列 -->
       <div class="nav-btn-row" id="guided-nav-row">
         <button onclick="prevStep()" id="btn-prev">⬅ 上一步</button>
-        <button class="btn-primary" onclick="autoWireCurrentOrNext()" id="btn-action-next">開始接線 ➔</button>
+        <button class="btn-primary btn-start-flash" onclick="autoWireCurrentOrNext()" id="btn-action-next">開始接線 ➔</button>
         <button onclick="nextStep()" id="btn-skip">下一步 ➡</button>
       </div>
 
@@ -676,12 +764,8 @@
         </button>
       </div>
       <div class="math-readout">
-        <div class="math-readout-row">
-          <span id="math-input-str">輸入：A (00₂ = 0) + B (00₂ = 0)</span>
-        </div>
-        <div class="math-readout-row">
-          <strong id="math-output-str">亮燈：000₂ (十進位 0)</strong>
-        </div>
+        <span id="math-input-str">輸入：A (00₂ = 0) + B (00₂ = 0)</span>
+        <strong id="math-output-str">亮燈：000₂ (0)</strong>
       </div>
     </div>
 
@@ -1094,6 +1178,7 @@ let selectedStartTerm = null;   // 目前已點選的第一個端點 ID
 let mouseSvgPt = { x: 0, y: 0 };
 let showCurrentFlow = true;
 let tempTestActive = false;
+let hudCollapsed = false;       // 右上角模式提示框是否收起
 
 const TRUTH_TABLE_DATA = [
   { A0:1, A1:0, B0:0, B1:0, expr:'1 + 0 = 1', jia:0, yi:0, bing:1 },
@@ -1279,7 +1364,7 @@ function renderBoard() {
           <feMergeNode in="SourceGraphic" />
         </feMerge>
       </filter>
-      <filter id="wire-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <filter id="wire-glow" filterUnits="userSpaceOnUse" x="-50" y="-50" width="1500" height="1050">
         <feGaussianBlur stdDeviation="3" result="blur" />
         <feMerge>
           <feMergeNode in="blur" />
@@ -1380,11 +1465,7 @@ function renderBoard() {
           html += `<path d="${pointsToOrthoPath(branchA)}" fill="none" stroke="#fef08a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="wire-live-flow" filter="url(#wire-glow)"/>`;
           html += `<path d="${pointsToOrthoPath(branchB)}" fill="none" stroke="#fef08a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="wire-live-flow" filter="url(#wire-glow)"/>`;
         } else {
-          // 動態依據兩端點與電源的拓撲距離 (nodeDist) 判斷電流實際流向
-          const dFrom = nodeDist[w.from] ?? 999;
-          const dTo = nodeDist[w.to] ?? 999;
-          const shouldReverse = (dTo < dFrom) || (dTo === dFrom && w.flowReverse);
-          const flowPts = shouldReverse ? [...w.path].reverse() : w.path;
+          const flowPts = w.flowReverse ? [...w.path].reverse() : w.path;
           const flowD = pointsToOrthoPath(flowPts);
           html += `<path d="${flowD}" fill="none" stroke="#fef08a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="wire-live-flow" filter="url(#wire-glow)"/>`;
         }
@@ -1451,7 +1532,7 @@ function renderBoard() {
     }
   }
 
-  // --- D. 固定保留預覽虛線元素 #preview-wire ---
+  // --- D. 固定保留預覽虛線元素 #preview-wire (滑鼠移動時僅更新 d 屬性，不重繪整張畫布) ---
   let previewD = '';
   if (selectedStartTerm && TERMINALS[selectedStartTerm]) {
     const st = TERMINALS[selectedStartTerm];
@@ -1521,12 +1602,7 @@ function renderBoard() {
         const intNode = `SW_INT_${t.swName}`;
         const dTerm = nodeDist[t.id] ?? 999;
         const dInt = nodeDist[intNode] ?? 999;
-        // 檢查該腳位目前是否與開關內部彈片導通 (若未導通，代表電從外部導線流入該腳位停住)
-        const isConnectedInsideSwitch =
-          (t.role === 'COM') ||
-          (t.role === 'NO' && isPressed) ||
-          (t.role === 'NC' && !isPressed);
-        const flowsIntoSwitch = !isConnectedInsideSwitch ? true : (dTerm <= dInt);
+        const flowsIntoSwitch = (dTerm <= dInt);
         const sx = flowsIntoSwitch ? t.x : t.pinX;
         const sy = flowsIntoSwitch ? t.y : t.pinY;
         const ex = flowsIntoSwitch ? t.pinX : t.x;
@@ -1647,6 +1723,7 @@ function renderBoard() {
     html += `
       <g class="terminal-group" onpointerdown="handleTerminalClick('${t.id}', event)">
         <title>${t.label}</title>
+        <!-- 隱形大範圍感應區 (半徑 15px)，確保任何滑鼠或觸控板都能輕鬆點中 -->
         <circle cx="${t.x}" cy="${t.y}" r="15" fill="transparent"/>
         <circle class="terminal-dot" cx="${t.x}" cy="${t.y}" r="${isTarget || simulatorMode === 'free' ? 7.5 : 5.5}"
           fill="${isPowered ? '#fde047' : cHex}"
@@ -1660,7 +1737,7 @@ function renderBoard() {
 }
 
 // ============================================================================
-// 8. 端點點擊互動邏輯
+// 8. 端點點擊互動邏輯 (修正滑鼠移動重繪導致點擊失效之問題)
 // ============================================================================
 svgEl.addEventListener('pointermove', (e) => {
   if (!selectedStartTerm || !TERMINALS[selectedStartTerm]) return;
@@ -1672,6 +1749,7 @@ svgEl.addEventListener('pointermove', (e) => {
   const cursorPt = pt.matrixTransform(ctm.inverse());
   mouseSvgPt = { x: Math.round(cursorPt.x), y: Math.round(cursorPt.y) };
 
+  // 只單獨更新 #preview-wire 的路徑屬性，絕對不重建 SVG DOM，讓第二下點擊 100% 穩定觸發
   const previewEl = document.getElementById('preview-wire');
   if (previewEl) {
     const st = TERMINALS[selectedStartTerm];
@@ -1805,6 +1883,19 @@ svgEl.addEventListener('pointerdown', () => {
 // ============================================================================
 // 9. 自由模式管理與 16 狀態自動診斷引擎
 // ============================================================================
+function toggleHudHint() {
+  hudCollapsed = !hudCollapsed;
+  const hudHint = document.getElementById('hud-mode-hint');
+  const toggleBtn = document.getElementById('hud-toggle-btn');
+  if (hudCollapsed) {
+    hudHint.classList.add('collapsed');
+    toggleBtn.textContent = '▼ 展開';
+  } else {
+    hudHint.classList.remove('collapsed');
+    toggleBtn.textContent = '▲ 收起';
+  }
+}
+
 function setSimulatorMode(mode) {
   simulatorMode = mode;
   selectedStartTerm = null;
@@ -1814,15 +1905,17 @@ function setSimulatorMode(mode) {
   const btnFree = document.getElementById('btn-mode-free');
   const stageSelect = document.getElementById('stage-select');
   const hudHint = document.getElementById('hud-mode-hint');
+  const hudTitle = document.getElementById('hud-mode-title');
+  const hudBody = document.getElementById('hud-mode-body');
   const diagBox = document.getElementById('diag-result-box');
 
   if (mode === 'free') {
     btnGuided.className = 'mode-btn';
     btnFree.className = 'mode-btn active-free';
     stageSelect.disabled = true;
-    hudHint.className = 'hud-pill free-mode-pill';
-    hudHint.innerHTML = `
-      🛠️ <b>自由接線模式</b><br>
+    hudHint.className = 'hud-pill free-mode-pill' + (hudCollapsed ? ' collapsed' : '');
+    hudTitle.innerHTML = `🛠️ <b>自由接線模式</b>`;
+    hudBody.innerHTML = `
       1. 點擊<b>任意兩個端點</b>即可自由拉線。<br>
       2. <b>直接點擊已接好的導線</b>即可將該線拆除。<br>
       3. 右側可執行「🔍 自動診斷目前電路」！
@@ -1833,9 +1926,9 @@ function setSimulatorMode(mode) {
     btnFree.className = 'mode-btn';
     stageSelect.disabled = false;
     diagBox.style.display = 'none';
-    hudHint.className = 'hud-pill';
-    hudHint.innerHTML = `
-      💡 <b>引導接線模式</b><br>
+    hudHint.className = 'hud-pill' + (hudCollapsed ? ' collapsed' : '');
+    hudTitle.innerHTML = `💡 <b>引導接線模式</b>`;
+    hudBody.innerHTML = `
       1. 依序點擊畫布上閃爍的兩個端點完成拉線，或按右側「⚡ 自動接上此線」。<br>
       2. 隨時可點擊 <b>A0、B0、A1、B1</b> 測試燈號！
     `;
@@ -2109,11 +2202,21 @@ function updateSidePanelAndReadout(sim) {
       methodBadge.innerHTML = `<span class="method-badge ${badgeCls}">${w.methodLabel}</span>`;
 
       actionBtn.textContent = isDone ? '下一步 ➔' : '⚡ 自動接上此線';
+      actionBtn.classList.remove('btn-start-flash');
     } else {
       instrText.innerText = stepObj.instruction;
       epUi.style.display = 'none';
       methodBadge.innerHTML = '';
-      actionBtn.textContent = (currentStepIdx === STEPS.length - 1) ? '已完成全部步驟' : '繼續下一步 ➔';
+      if (currentStepIdx === 0) {
+        actionBtn.textContent = '開始接線 ➔';
+        actionBtn.classList.add('btn-start-flash');
+      } else if (currentStepIdx === STEPS.length - 1) {
+        actionBtn.textContent = '已完成全部步驟';
+        actionBtn.classList.remove('btn-start-flash');
+      } else {
+        actionBtn.textContent = '繼續下一步 ➔';
+        actionBtn.classList.remove('btn-start-flash');
+      }
     }
 
     // 檢查點臨時測試按鈕顯示控制
